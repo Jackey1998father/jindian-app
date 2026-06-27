@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* 锦点 · 熟柿橙 & 山葵绿 主题 */
+    --background: 31 33% 97%;
+    --foreground: 30 14% 14%;
+    --card: 40 35% 99%;
+    --card-foreground: 30 14% 14%;
+    --popover: 40 35% 99%;
+    --popover-foreground: 30 14% 14%;
+    --primary: 17 76% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 30 15% 94%;
+    --secondary-foreground: 30 14% 14%;
+    --muted: 30 15% 94%;
+    --muted-foreground: 30 5% 45%;
+    --accent: 100 18% 62%;
+    --accent-foreground: 30 14% 14%;
+    --destructive: 0 65% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 35 15% 88%;
+    --input: 35 15% 88%;
+    --ring: 17 76% 50%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-[#FDF9F5] text-foreground;
+    font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.3;
+    background-image:
+      radial-gradient(circle at 20% 80%, rgba(224,85,31,0.03) 0%, transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba(74,107,64,0.03) 0%, transparent 50%);
+  }
+}
+
+.custom-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: #EBE3D8;
+  border-radius: 4px;
+}

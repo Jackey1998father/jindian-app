@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <defs>
+    <!-- 紫色发光渐变 -->
+    <linearGradient id="purpleGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A855F7"/>
+      <stop offset="50%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#6366F1"/>
+    </linearGradient>
+    <!-- 淡紫色发光 -->
+    <linearGradient id="purpleLight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#C084FC"/>
+      <stop offset="100%" stop-color="#A855F7"/>
+    </linearGradient>
+    <!-- 发光滤镜 -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- 碗身轮廓 - 带发光效果 -->
+  <path d="M28 58 Q28 95 60 95 Q92 95 92 58" 
+        stroke="url(#purpleGlow)" stroke-width="2.5" fill="none" 
+        filter="url(#glow)" stroke-linecap="round"/>
+  
+  <!-- 碗底 -->
+  <path d="M35 88 Q60 105 85 88" 
+        stroke="#8B5CF6" stroke-width="2" fill="none" 
+        filter="url(#glow)" stroke-linecap="round" opacity="0.8"/>
+
+  <!-- 碗口 -->
+  <ellipse cx="60" cy="58" rx="32" ry="6" 
+           stroke="url(#purpleLight)" stroke-width="2" fill="none" 
+           filter="url(#glow)"/>
+
+  <!-- 电路板纹理 - 碗身左侧 -->
+  <path d="M35 68 L45 72 L42 80 L52 85" 
+        stroke="#A855F7" stroke-width="1.2" fill="none" 
+        opacity="0.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M40 62 L48 66 L50 75" 
+        stroke="#A855F7" stroke-width="1" fill="none" 
+        opacity="0.5" stroke-linecap="round"/>
+  
+  <!-- 电路板纹理 - 碗身右侧 -->
+  <path d="M85 68 L75 72 L78 80 L68 85" 
+        stroke="#A855F7" stroke-width="1.2" fill="none" 
+        opacity="0.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M80 62 L72 66 L70 75" 
+        stroke="#A855F7" stroke-width="1" fill="none" 
+        opacity="0.5" stroke-linecap="round"/>
+  
+  <!-- 底部电路网格 -->
+  <line x1="50" y1="90" x2="50" y2="95" stroke="#8B5CF6" stroke-width="0.8" opacity="0.4"/>
+  <line x1="60" y1="92" x2="60" y2="97" stroke="#8B5CF6" stroke-width="0.8" opacity="0.4"/>
+  <line x1="70" y1="90" x2="70" y2="95" stroke="#8B5CF6" stroke-width="0.8" opacity="0.4"/>
+  <line x1="45" y1="94" x2="75" y2="94" stroke="#8B5CF6" stroke-width="0.8" opacity="0.4"/>
+
+  <!-- 蒸汽/热气线条 - 左 -->
+  <path d="M45 48 Q42 35 48 22" 
+        stroke="url(#purpleLight)" stroke-width="2" fill="none" 
+        filter="url(#glow)" stroke-linecap="round" opacity="0.9">
+    <animate attributeName="d" 
+             values="M45 48 Q42 35 48 22;M45 48 Q48 35 44 20;M45 48 Q42 35 48 22" 
+             dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.9;0.5;0.9" dur="2s" repeatCount="indefinite"/>
+  </path>
+  
+  <!-- 蒸汽/热气线条 - 中 -->
+  <path d="M60 45 Q56 30 62 18" 
+        stroke="url(#purpleGlow)" stroke-width="2.5" fill="none" 
+        filter="url(#glow)" stroke-linecap="round" opacity="0.8">
+    <animate attributeName="d" 
+             values="M60 45 Q56 30 62 18;M60 45 Q64 30 58 16;M60 45 Q56 30 62 18" 
+             dur="2.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.8;0.4;0.8" dur="2.2s" repeatCount="indefinite"/>
+  </path>
+  
+  <!-- 蒸汽/热气线条 - 右 -->
+  <path d="M75 48 Q78 35 72 22" 
+        stroke="url(#purpleLight)" stroke-width="2" fill="none" 
+        filter="url(#glow)" stroke-linecap="round" opacity="0.9">
+    <animate attributeName="d" 
+             values="M75 48 Q78 35 72 22;M75 48 Q72 35 76 20;M75 48 Q78 35 72 22" 
+             dur="3.2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.9;0.5;0.9" dur="2.5s" repeatCount="indefinite"/>
+  </path>
+
+  <!-- AI 神经网络节点 - 左上 -->
+  <circle cx="32" cy="38" r="3" fill="#C084FC" filter="url(#glow)">
+    <animate attributeName="r" values="3;4;3" dur="1.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="1;0.6;1" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- AI 节点连接线 - 左上 -->
+  <line x1="35" y1="40" x2="48" y2="50" 
+        stroke="#A855F7" stroke-width="1.5" opacity="0.7">
+    <animate attributeName="opacity" values="0.7;0.3;0.7" dur="1.5s" repeatCount="indefinite"/>
+  </line>
+  
+  <!-- AI 神经网络节点 - 右上 -->
+  <circle cx="88" cy="38" r="3" fill="#C084FC" filter="url(#glow)">
+    <animate attributeName="r" values="3;4;3" dur="1.8s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="1;0.6;1" dur="1.8s" repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- AI 节点连接线 - 右上 -->
+  <line x1="85" y1="40" x2="72" y2="50" 
+        stroke="#A855F7" stroke-width="1.5" opacity="0.7">
+    <animate attributeName="opacity" values="0.7;0.3;0.7" dur="1.8s" repeatCount="indefinite"/>
+  </line>
+  
+  <!-- AI 神经网络节点 - 中上 -->
+  <circle cx="60" cy="28" r="3.5" fill="#E9D5FF" filter="url(#glow)">
+    <animate attributeName="r" values="3.5;4.5;3.5" dur="1.2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="1;0.5;1" dur="1.2s" repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- 中心连接线 -->
+  <line x1="60" y1="31" x2="60" y2="42" 
+        stroke="#C084FC" stroke-width="1.8" opacity="0.8">
+    <animate attributeName="opacity" values="0.8;0.4;0.8" dur="1.2s" repeatCount="indefinite"/>
+  </line>
+  
+  <!-- 从中心到两侧的连接 -->
+  <line x1="57" y1="30" x2="35" y2="38" 
+        stroke="#A855F7" stroke-width="1.2" opacity="0.5">
+    <animate attributeName="opacity" values="0.5;0.2;0.5" dur="1.5s" repeatCount="indefinite"/>
+  </line>
+  <line x1="63" y1="30" x2="85" y2="38" 
+        stroke="#A855F7" stroke-width="1.2" opacity="0.5">
+    <animate attributeName="opacity" values="0.5;0.2;0.5" dur="1.8s" repeatCount="indefinite"/>
+  </line>
+
+  <!-- 碗身内部发光圆点 -->
+  <circle cx="45" cy="70" r="2" fill="#E9D5FF" opacity="0.8">
+    <animate attributeName="opacity" values="0.8;0.3;0.8" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="75" cy="70" r="2" fill="#E9D5FF" opacity="0.6">
+    <animate attributeName="opacity" values="0.6;0.2;0.6" dur="2.3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="60" cy="78" r="2.5" fill="#C084FC" opacity="0.7">
+    <animate attributeName="opacity" values="0.7;0.3;0.7" dur="1.8s" repeatCount="indefinite"/>
+  </circle>
+</svg>
