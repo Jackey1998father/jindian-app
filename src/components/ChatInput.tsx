@@ -16,7 +16,7 @@ export function ChatInput() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const kbPopRef = useRef<HTMLDivElement>(null)
   const [kbOpen, setKbOpen] = useState(false)
-  const isStreaming = useRef(false)
+  const [isStreaming, setIsStreaming] = useState(false)
   const isEnhanced = state.chatMode === "enhanced"
 
   // 点击外部关闭 KB 选择弹窗
@@ -37,7 +37,7 @@ export function ChatInput() {
 
   const doSend = useCallback(
     async (query: string) => {
-      if (!query || state.isTyping || isStreaming.current) return
+      if (!query || state.isTyping || isStreaming) return
 
       const userMsg: ChatMessage = {
         id: genId(),
@@ -71,7 +71,7 @@ export function ChatInput() {
         setTimeout(() => textareaRef.current?.focus(), 50)
       } else {
         // ===== 普通模式：流式 API 调用 =====
-        isStreaming.current = true
+        setIsStreaming(true)
 
         // 插入一个气泡，内容是"美味即将到来"（ChatMessage 会渲染闪烁点）
         const aiMsgId = genId()
@@ -110,7 +110,7 @@ export function ChatInput() {
             text: `⚠️ ${err instanceof Error ? err.message : "请求失败，请稍后重试"}`,
           })
         } finally {
-          isStreaming.current = false
+          setIsStreaming(false)
           setTimeout(() => textareaRef.current?.focus(), 50)
         }
       }
@@ -155,7 +155,7 @@ export function ChatInput() {
     dispatch({ type: "TOGGLE_KB_SELECTION", kbId })
   }
 
-  const sendDisabled = state.isTyping || isStreaming.current
+  const sendDisabled = state.isTyping || isStreaming
 
   return (
     <div className="px-4 md:px-7 pt-2 md:pt-3 pb-3 md:pb-5 border-t border-thread bg-white flex-shrink-0">
