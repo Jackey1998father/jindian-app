@@ -2,8 +2,8 @@ import { useRef, useCallback, useState, useEffect, type KeyboardEvent } from "re
 import { useApp } from "@/components/AppContext"
 import { genId } from "@/services/storage"
 import { generateAIResponse } from "@/services/rag"
-import { chatStream } from "@/services/api"
-import type { ChatMessage } from "@/types"
+import { chatStream, createConversation } from "@/services/api"
+import type { ChatMessage, ConversationSummary } from "@/types"
 
 let _pendingQuery: string | null = null
 
@@ -16,8 +16,26 @@ export function ChatInput() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const kbPopRef = useRef<HTMLDivElement>(null)
   const [kbOpen, setKbOpen] = useState(false)
-  const [isStreaming, setIsStreaming] = useState(false)
+  const [streamingConvId, setStreamingConvId] = useState<string | null>(null)
+  const [query, setQuery] = useState("") // 改用受控输入，避免 uncontrolled + IME 导致的 value 不同步
+  const [thinkingEnabled, setThinkingEnabled] = useState(false)
   const isEnhanced = state.chatMode === "enhanced"
+  const activeConvIdRef = useRef(state.activeConversationId)
+  // 按会话管理流：支持多会话同时流式，同一会话重复发送则 abort 旧的
+  const streamingConvIdsRef = useRef<Set<string>>(new Set())
+  const abortControllersRef = useRef<Map<string, AbortController>>(new Map())
+
+  // 同步当前活跃会话 ID 的 ref，供流式回调读取最新值
+  useEffect(() => {
+    activeConvIdRef.current = state.activeConversationId
+  }, [state.activeConversationId])
+
+  // 组件卸载时取消所有正在进行的流式请求
+  useEffect(() => {
+    return () => {
+      abortControllersRef.current.forEach((ac) => ac.abort())
+    }
+  }, [])
 
   // 点击外部关闭 KB 选择弹窗
   useEffect(() => {
@@ -37,7 +55,7 @@ export function ChatInput() {
 
   const doSend = useCallback(
     async (query: string) => {
-      if (!query || state.isTyping || isStreaming) return
+      if (!query || state.isTyping) return
 
       const userMsg: ChatMessage = {
         id: genId(),
@@ -53,34 +71,66 @@ export function ChatInput() {
         // ===== 增强模式：本地 RAG 搜索 =====
         dispatch({ type: "SET_TYPING", value: true })
 
-        await new Promise((r) => setTimeout(r, 600 + Math.random() * 1000))
+        try {
+          await new Promise((r) => setTimeout(r, 600 + Math.random() * 1000))
 
-        const kbs = activeKBs
-        const response = generateAIResponse(query, kbs)
-        const aiMsg: ChatMessage = {
-          id: genId(),
-          role: "ai",
-          text: response.text,
-          hasSource: response.hasSource,
-          sources: response.sources,
-          time: new Date().toISOString(),
+          const kbs = activeKBs
+          const response = generateAIResponse(query, kbs)
+          const aiMsg: ChatMessage = {
+            id: genId(),
+            role: "ai",
+            text: response.text,
+            hasSource: response.hasSource,
+            sources: response.sources,
+            time: new Date().toISOString(),
+          }
+
+          dispatch({ type: "SET_TYPING", value: false })
+          dispatch({ type: "ADD_MESSAGE", message: aiMsg })
+        } finally {
+          setTimeout(() => textareaRef.current?.focus(), 50)
         }
-
-        dispatch({ type: "SET_TYPING", value: false })
-        dispatch({ type: "ADD_MESSAGE", message: aiMsg })
-        setTimeout(() => textareaRef.current?.focus(), 50)
       } else {
         // ===== 普通模式：流式 API 调用 =====
-        setIsStreaming(true)
 
-        // 插入一个气泡，内容是"美味即将到来"（ChatMessage 会渲染闪烁点）
+        // 确保有活跃会话（首次使用时自动创建）
+        let convId = state.activeConversationId
+        if (!convId) {
+          try {
+            const summary = await createConversation("新对话")
+            convId = summary.id
+            dispatch({ type: "ADD_REMOTE_CONVERSATION", summary })
+          } catch {
+            // 后端不可用时本地降级
+            const fallback: ConversationSummary = {
+              id: genId(),
+              title: "新对话",
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              message_count: 0,
+            }
+            convId = fallback.id
+            dispatch({ type: "ADD_REMOTE_CONVERSATION", summary: fallback })
+          }
+        }
+
+        // 同一会话内重复发送才取消上一个流，跨会话互不干扰
+        if (streamingConvIdsRef.current.has(convId)) {
+          abortControllersRef.current.get(convId)?.abort()
+        }
+        streamingConvIdsRef.current.add(convId)
+        setStreamingConvId(convId)
+        const ac = new AbortController()
+        abortControllersRef.current.set(convId, ac)
+
+        // 插入占位气泡
         const aiMsgId = genId()
         dispatch({
           type: "ADD_MESSAGE",
           message: {
             id: aiMsgId,
             role: "ai",
-            text: "美味即将到来",
+            text: thinkingEnabled ? "美味深度制造中" : "美味即将到来",
             hasSource: false,
             sources: null,
             time: new Date().toISOString(),
@@ -89,33 +139,36 @@ export function ChatInput() {
 
         let receivedFirstChunk = false
         try {
-          const contextMessages: ChatMessage[] = [
-            ...state.messages,
-            userMsg,
-          ]
-
-          await chatStream(contextMessages, (chunk) => {
+          // 只传 conversation_id + 当前消息，历史由后端管理
+          await chatStream(convId, query, (chunk) => {
             if (!receivedFirstChunk) {
-              // 收到第一个字：把"美味即将到来"替换成真实内容
               receivedFirstChunk = true
-              dispatch({ type: "SET_LAST_MESSAGE_TEXT", text: chunk })
+              // 始终更新对应会话缓存；若已切到其它会话，reducer 只更新缓存不渲染
+              dispatch({ type: "SET_MESSAGE_TEXT", id: aiMsgId, text: chunk, conversationId: convId })
             } else {
-              dispatch({ type: "APPEND_TO_LAST_MESSAGE", text: chunk })
+              dispatch({ type: "APPEND_TO_MESSAGE", id: aiMsgId, text: chunk, conversationId: convId })
             }
-          })
+          }, ac.signal, thinkingEnabled)
         } catch (err) {
-          // 失败：把"美味即将到来"替换成错误提示
+          // AbortError 是正常取消，不展示错误
+          if (err instanceof DOMException && err.name === "AbortError") return
+          // 始终写入对应会话缓存（活跃时渲染到视图，非活跃时切回可见）
           dispatch({
-            type: "SET_LAST_MESSAGE_TEXT",
+            type: "SET_MESSAGE_TEXT",
+            id: aiMsgId,
             text: `⚠️ ${err instanceof Error ? err.message : "请求失败，请稍后重试"}`,
+            conversationId: convId,
           })
         } finally {
-          setIsStreaming(false)
+          // 清理该会话的流式状态
+          streamingConvIdsRef.current.delete(convId)
+          abortControllersRef.current.delete(convId)
+          setStreamingConvId((current) => (current === convId ? null : current))
           setTimeout(() => textareaRef.current?.focus(), 50)
         }
       }
     },
-    [state.isTyping, state.messages, isEnhanced, activeKBs, dispatch]
+    [state.isTyping, state.messages, state.activeConversationId, isEnhanced, activeKBs, thinkingEnabled, dispatch]
   )
 
   // Poll for pending queries from welcome chips
@@ -136,9 +189,9 @@ export function ChatInput() {
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      if (textareaRef.current?.value.trim()) {
-        const q = textareaRef.current.value
-        textareaRef.current.value = ""
+      const q = query.trim()
+      if (q) {
+        setQuery("")
         void doSend(q)
       }
     }
@@ -155,7 +208,7 @@ export function ChatInput() {
     dispatch({ type: "TOGGLE_KB_SELECTION", kbId })
   }
 
-  const sendDisabled = state.isTyping || isStreaming
+  const sendDisabled = state.isTyping || streamingConvIdsRef.current.has(state.activeConversationId)
 
   return (
     <div className="px-4 md:px-7 pt-2 md:pt-3 pb-3 md:pb-5 border-t border-thread bg-white flex-shrink-0">
@@ -250,23 +303,45 @@ export function ChatInput() {
       </div>
 
       {/* 输入框 */}
-      <div className="flex gap-2 md:gap-2.5 items-end">
+      <div className="flex gap-2 md:gap-2.5 items-center">
         <div className="flex-1 relative">
           <textarea
             ref={textareaRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={isEnhanced && activeKBs.length > 0 ? "搜索知识库中的内容…" : "输入您的问题…"}
             rows={1}
-            className="w-full min-h-12 max-h-[140px] px-3 md:px-4 py-3 text-sm leading-relaxed text-ink bg-parchment rounded-[10px] border border-thread resize-none transition-all duration-200 placeholder:text-ink-faint focus:border-persimmon focus:bg-white focus:shadow-[0_0_0_3px_rgba(224,85,31,0.08),inset_0_1px_0_#F3EDE6] outline-none"
+            className="w-full min-h-12 max-h-[140px] px-3 md:pl-4 md:pr-20 py-3 text-sm leading-relaxed text-ink bg-parchment rounded-[10px] border border-thread resize-none transition-all duration-200 placeholder:text-ink-faint focus:border-persimmon focus:bg-white focus:shadow-[0_0_0_3px_rgba(224,85,31,0.08),inset_0_1px_0_#F3EDE6] outline-none"
           />
+
+          {/* 思考开关 — 嵌入输入框内右侧 */}
+          <button
+            onClick={() => setThinkingEnabled((v) => !v)}
+            title={thinkingEnabled ? "已开启深度思考" : "开启深度思考"}
+            className={`absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 px-1.5 py-1 text-[11px] font-semibold rounded-md transition-all duration-200 whitespace-nowrap border ${
+              thinkingEnabled
+                ? "bg-amber-50 text-amber-600 border-amber-300"
+                : "text-ink-faint border-transparent hover:text-ink-muted hover:bg-parchment"
+            }`}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill={thinkingEnabled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v1a3 3 0 0 0 3 3 3 3 0 0 0 3-3V5a3 3 0 0 0-3-3z" />
+              <path d="M12 9v3" />
+              <path d="M4.93 8.07l-.7-.7a3 3 0 0 1 4.24-4.24l.7.7" />
+              <path d="M19.07 8.07l.7-.7a3 3 0 0 0-4.24-4.24l-.7.7" />
+              <path d="M8 22h8" />
+              <path d="M12 18v4" />
+            </svg>
+            <span className="hidden sm:inline">思考</span>
+          </button>
         </div>
 
         <button
           onClick={() => {
-            const el = textareaRef.current
-            if (el?.value.trim()) {
-              const q = el.value
-              el.value = ""
+            const q = query.trim()
+            if (q) {
+              setQuery("")
               void doSend(q)
             }
           }}

@@ -1,5 +1,6 @@
 import { useApp } from "@/components/AppContext"
 import { cn } from "@/lib/utils"
+import { createNewConversation } from "@/hooks/useApp"
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const { state, dispatch } = useApp()
@@ -44,7 +45,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         {/* 新会话按钮 - 手机端只显示图标 */}
         {!isInManage && (
           <button
-            onClick={() => dispatch({ type: "NEW_CONVERSATION" })}
+            onClick={() => createNewConversation(dispatch)}
             className="inline-flex items-center gap-1.5 px-2 md:px-3.5 py-1.5 text-[12px] font-semibold rounded-md border border-thread text-ink-soft hover:text-persimmon hover:border-persimmon hover:bg-persimmon/5 transition-all duration-200"
             title="新会话"
           >

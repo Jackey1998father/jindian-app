@@ -94,7 +94,7 @@ const mdComponents: Partial<Components> = {
 export function ChatMessage({ message }: { message: ChatMessageType }) {
   const isUser = message.role === "user"
   const avatarSrc = isUser ? "/avatars/user-avatar.png" : "/icon-purple.svg"
-  const isWaiting = !isUser && message.text === "美味即将到来"
+  const isWaiting = !isUser && (message.text === "美味即将到来" || message.text === "美味深度制造中")
 
   return (
     <div
@@ -131,7 +131,7 @@ export function ChatMessage({ message }: { message: ChatMessageType }) {
         >
           {isWaiting ? (
             <span className="flex items-center gap-2">
-              <span className="text-ink-muted">美味即将到来</span>
+              <span className="text-ink-muted">{message.text}</span>
               <span className="flex gap-1 items-center">
                 <span className="w-1.5 h-1.5 rounded-sm bg-ink-muted animate-dot-bounce" />
                 <span className="w-1.5 h-1.5 rounded-sm bg-ink-muted animate-dot-bounce [animation-delay:0.18s]" />

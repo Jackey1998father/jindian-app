@@ -1,5 +1,6 @@
 import { useApp } from "@/components/AppContext"
 import { cn } from "@/lib/utils"
+import { createNewConversation, loadMessagesForConversation, removeConversation } from "@/hooks/useApp"
 import type { Conversation } from "@/types"
 
 function formatTime(iso: string): string {
@@ -26,21 +27,38 @@ export function Sidebar({
   const { state, dispatch } = useApp()
   const conversations = state.conversations
 
-  const handleNewConv = () => {
-    dispatch({ type: "NEW_CONVERSATION" })
+  const handleNewConv = async () => {
+    await createNewConversation(dispatch)
     onClose?.()
   }
 
-  const handleSwitch = (id: string) => {
-    if (id !== state.activeConversationId) {
-      dispatch({ type: "SWITCH_CONVERSATION", id })
+  const handleSwitch = async (id: string) => {
+    if (id === state.activeConversationId) {
+      onClose?.()
+      return
+    }
+
+    const conv = conversations.find((c) => c.id === id)
+    if (!conv) {
+      onClose?.()
+      return
+    }
+
+    // 加载消息（内部会 dispatch SET_MESSAGES），不额外覆盖
+    if (!conv.messagesLoaded) {
+      await loadMessagesForConversation(id, dispatch)
+    } else {
+      // 已加载过，直接切换显示
+      dispatch({ type: "SET_MESSAGES", conversationId: id, messages: conv.messages })
     }
     onClose?.()
   }
 
-  const handleDelete = (e: React.MouseEvent, id: string) => {
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
-    dispatch({ type: "DELETE_CONVERSATION", id })
+    // 至少保留一个会话，不允许全部删除
+    if (conversations.length <= 1) return
+    await removeConversation(id, dispatch)
   }
 
   const content = (
@@ -104,23 +122,25 @@ export function Sidebar({
                   </p>
                   <p className="text-[11px] text-ink-muted mt-0.5">
                     {formatTime(conv.updatedAt || conv.createdAt)}
-                    {conv.messages.length > 0 && (
-                      <span className="ml-1.5">· {conv.messages.length} 条消息</span>
+                    {(conv.messageCount ?? 0) > 0 && (
+                      <span className="ml-1.5">· {conv.messageCount} 条消息</span>
                     )}
                   </p>
                 </div>
 
-                {/* 删除按钮 */}
-                <button
-                  onClick={(e) => handleDelete(e, conv.id)}
-                  className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-md text-ink-muted hover:text-red-500 hover:bg-red-50 transition-all duration-150 flex-shrink-0"
-                  title="删除会话"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  </svg>
-                </button>
+                {/* 删除按钮：只有多于 1 个会话时才显示 */}
+                {conversations.length > 1 && (
+                  <button
+                    onClick={(e) => handleDelete(e, conv.id)}
+                    className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-md text-ink-muted hover:text-red-500 hover:bg-red-50 transition-all duration-150 flex-shrink-0"
+                    title="删除会话"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                  </button>
+                )}
               </div>
             ))}
           </div>

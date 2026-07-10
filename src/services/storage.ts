@@ -1,49 +1,49 @@
-import type { AppData, Conversation, User } from "@/types"
+import type { KnowledgeBase } from "@/types"
+import type { User } from "@/types"
 
-const STORAGE_KEY = "jindian_assistant"
+const KB_KEY = "jindian_knowledge"
 const AUTH_KEY = "jindian_auth"
+const TOKEN_KEY = "jindian_token"
 
-export function loadData(): AppData {
+// ========== 知识库（本地存储）==========
+
+export function loadKnowledgeBases(): KnowledgeBase[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(KB_KEY)
     if (raw) {
       const data = JSON.parse(raw)
-      return {
-        knowledgeBases: data.knowledgeBases || [],
-        // 只保留有消息的会话
-        conversations: (data.conversations || []).filter(
-          (c: Conversation) => c.messages && c.messages.length > 0
-        ),
-      }
+      return data.knowledgeBases || []
     }
   } catch {
     /* ignore */
   }
-  return { knowledgeBases: [], conversations: [] }
+  return []
 }
 
-export function saveData(data: AppData): void {
+export function saveKnowledgeBases(knowledgeBases: KnowledgeBase[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+    localStorage.setItem(KB_KEY, JSON.stringify({ knowledgeBases }))
   } catch {
     /* ignore */
   }
 }
 
-/** 持久化登录状态 */
+// ========== 认证 ==========
+
 export function saveAuth(user: User | null): void {
   try {
     if (user) {
       localStorage.setItem(AUTH_KEY, JSON.stringify(user))
+      localStorage.setItem(TOKEN_KEY, user.token)
     } else {
       localStorage.removeItem(AUTH_KEY)
+      localStorage.removeItem(TOKEN_KEY)
     }
   } catch {
     /* ignore */
   }
 }
 
-/** 读取持久化的登录状态 */
 export function loadAuth(): User | null {
   try {
     const raw = localStorage.getItem(AUTH_KEY)
@@ -55,6 +55,16 @@ export function loadAuth(): User | null {
   }
   return null
 }
+
+export function loadToken(): string {
+  try {
+    return localStorage.getItem(TOKEN_KEY) || ""
+  } catch {
+    return ""
+  }
+}
+
+// ========== 工具 ==========
 
 export function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)

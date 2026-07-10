@@ -1,15 +1,38 @@
 import { useState, type FormEvent } from "react"
 import { useApp } from "@/components/AppContext"
+import { loginAPI } from "@/services/api"
 
 export function LoginView() {
   const { state, dispatch } = useApp()
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [showPw, setShowPw] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    dispatch({ type: "LOGIN", username, password })
+
+    const u = username.trim()
+    const p = password.trim()
+    if (!u) {
+      dispatch({ type: "SET_LOGIN_ERROR", error: "请输入账号" })
+      return
+    }
+    if (!p) {
+      dispatch({ type: "SET_LOGIN_ERROR", error: "请输入密码" })
+      return
+    }
+
+    setLoading(true)
+    dispatch({ type: "SET_LOGIN_ERROR", error: "" })
+    try {
+      const user = await loginAPI(u, p)
+      dispatch({ type: "LOGIN", user })
+    } catch (err) {
+      dispatch({ type: "SET_LOGIN_ERROR", error: err instanceof Error ? err.message : "登录失败，请重试" })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -114,14 +137,15 @@ export function LoginView() {
           {/* 登录按钮 */}
           <button
             type="submit"
-            className="w-full py-2.5 text-[14px] font-bold text-white bg-persimmon rounded-lg hover:bg-persimmon-hi hover:shadow-[0_4px_12px_rgba(224,85,31,0.3)] active:scale-[0.98] transition-all duration-200 mt-1"
+            disabled={loading}
+            className="w-full py-2.5 text-[14px] font-bold text-white bg-persimmon rounded-lg hover:bg-persimmon-hi hover:shadow-[0_4px_12px_rgba(224,85,31,0.3)] active:scale-[0.98] transition-all duration-200 mt-1 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            登 录
+            {loading ? "登录中…" : "登 录"}
           </button>
         </form>
 
         <p className="text-center text-[11px] text-ink-faint mt-6">
-          任意输入账号密码即可体验
+          锦点餐饮 · 内部管理平台
         </p>
       </div>
     </div>
