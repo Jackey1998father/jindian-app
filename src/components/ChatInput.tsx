@@ -346,7 +346,7 @@ export function ChatInput() {
             }
           }}
           disabled={sendDisabled}
-          className="w-11 h-11 md:w-12 md:h-12 rounded-[10px] bg-persimmon text-white flex items-center justify-center flex-shrink-0 transition-all duration-200 disabled:bg-ink-faint disabled:cursor-not-allowed hover:bg-persimmon-hi hover:scale-105 active:scale-95"
+          className="w-11 h-11 md:w-12 md:h-12 rounded-[10px] bg-persimmon text-white flex items-center justify-center flex-shrink-0 transition-all duration-200 disabled:bg-ink-faint disabled:cursor-not-allowed hover:bg-persimmon-hi hover:scale-105 active:scale-95 mb-[3px]"
         >
           <svg
             width="18"
