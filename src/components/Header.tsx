@@ -1,6 +1,5 @@
 import { useApp } from "@/components/AppContext"
 import { cn } from "@/lib/utils"
-import { createNewConversation } from "@/hooks/useApp"
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const { state, dispatch } = useApp()
@@ -40,21 +39,6 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           <span className="hidden sm:inline text-[12px] font-medium text-ink-muted bg-parchment px-3 py-1 rounded-full border border-thread-light">
             {state.user.username}
           </span>
-        )}
-
-        {/* 新会话按钮 - 手机端只显示图标 */}
-        {!isInManage && (
-          <button
-            onClick={() => createNewConversation(dispatch)}
-            className="inline-flex items-center gap-1.5 px-2 md:px-3.5 py-1.5 text-[12px] font-semibold rounded-md border border-thread text-ink-soft hover:text-persimmon hover:border-persimmon hover:bg-persimmon/5 transition-all duration-200"
-            title="新会话"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            <span className="hidden sm:inline">新会话</span>
-          </button>
         )}
 
         {/* 管理端切换 */}

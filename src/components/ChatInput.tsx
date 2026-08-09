@@ -1,14 +1,14 @@
 import { useRef, useCallback, useState, useEffect, type KeyboardEvent } from "react"
 import { useApp } from "@/components/AppContext"
 import { genId } from "@/services/storage"
-import { generateAIResponse } from "@/services/rag"
-import { chatStream, createConversation } from "@/services/api"
+import { chatStream, ragChatStream, createConversation } from "@/services/api"
 import type { ChatMessage, ConversationSummary } from "@/types"
 
-let _pendingQuery: string | null = null
+let _setInputQuery: ((q: string) => void) | null = null
 
-export function requestSend(query: string) {
-  _pendingQuery = query
+/** 将文字填入输入框，不自动发送（由 WelcomeScreen 快捷标签调用） */
+export function requestFill(query: string) {
+  _setInputQuery?.(query)
 }
 
 export function ChatInput() {
@@ -17,8 +17,22 @@ export function ChatInput() {
   const kbPopRef = useRef<HTMLDivElement>(null)
   const [kbOpen, setKbOpen] = useState(false)
   const [streamingConvId, setStreamingConvId] = useState<string | null>(null)
-  const [query, setQuery] = useState("") // 改用受控输入，避免 uncontrolled + IME 导致的 value 不同步
+  const [query, setQuery] = useState("")
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
+  const queryRef = useRef(query)
+
+  // 同步 ref + 注册模块级 setter，供 WelcomeScreen 快捷标签直接填入
+  useEffect(() => {
+    queryRef.current = query
+  }, [query])
+  useEffect(() => {
+    _setInputQuery = (q: string) => {
+      setQuery(q)
+      // 延迟聚焦，等 React 渲染完
+      setTimeout(() => textareaRef.current?.focus(), 0)
+    }
+    return () => { _setInputQuery = null }
+  }, [])
   const isEnhanced = state.chatMode === "enhanced"
   const activeConvIdRef = useRef(state.activeConversationId)
   // 按会话管理流：支持多会话同时流式，同一会话重复发送则 abort 旧的
@@ -50,12 +64,36 @@ export function ChatInput() {
   }, [kbOpen])
 
   const activeKBs = isEnhanced
-    ? state.knowledgeBases.filter(kb => state.selectedKBIds.includes(kb.id) && kb.documents.length > 0)
+    ? state.knowledgeBases.filter(kb => state.selectedKBIds.includes(kb.id) && kb.docCount > 0)
     : []
 
   const doSend = useCallback(
     async (query: string) => {
       if (!query || state.isTyping) return
+
+      // 决定是否走 RAG 增强（需同时满足：增强模式 + 已选知识库）
+      const useRag = isEnhanced && state.selectedKBIds.length > 0
+
+      // ===== 确保有活跃会话（先建会话，再插消息，避免 ADD_REMOTE_CONVERSATION 清空消息）=====
+      let convId = state.activeConversationId
+      if (!convId) {
+        try {
+          const summary = await createConversation("新对话")
+          convId = summary.id
+          dispatch({ type: "ADD_REMOTE_CONVERSATION", summary })
+        } catch {
+          // 后端不可用时本地降级
+          const fallback: ConversationSummary = {
+            id: genId(),
+            title: "新对话",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            message_count: 0,
+          }
+          convId = fallback.id
+          dispatch({ type: "ADD_REMOTE_CONVERSATION", summary: fallback })
+        }
+      }
 
       const userMsg: ChatMessage = {
         id: genId(),
@@ -67,124 +105,79 @@ export function ChatInput() {
       }
       dispatch({ type: "ADD_MESSAGE", message: userMsg })
 
-      if (isEnhanced) {
-        // ===== 增强模式：本地 RAG 搜索 =====
-        dispatch({ type: "SET_TYPING", value: true })
+      // ===== 同一会话内重复发送则取消上一个流，跨会话互不干扰 =====
+      if (streamingConvIdsRef.current.has(convId)) {
+        abortControllersRef.current.get(convId)?.abort()
+      }
+      streamingConvIdsRef.current.add(convId)
+      setStreamingConvId(convId)
+      const ac = new AbortController()
+      abortControllersRef.current.set(convId, ac)
 
-        try {
-          await new Promise((r) => setTimeout(r, 600 + Math.random() * 1000))
+      // ===== 插入占位气泡（检索中 / 美味即将到来）=====
+      const aiMsgId = genId()
+      const placeholderText = useRag
+        ? "🔍 正在检索知识库..."
+        : thinkingEnabled
+          ? "美味深度制造中"
+          : "美味即将到来"
+      dispatch({
+        type: "ADD_MESSAGE",
+        message: {
+          id: aiMsgId,
+          role: "ai",
+          text: placeholderText,
+          hasSource: false,
+          sources: null,
+          time: new Date().toISOString(),
+        },
+      })
 
-          const kbs = activeKBs
-          const response = generateAIResponse(query, kbs)
-          const aiMsg: ChatMessage = {
-            id: genId(),
-            role: "ai",
-            text: response.text,
-            hasSource: response.hasSource,
-            sources: response.sources,
-            time: new Date().toISOString(),
+      let receivedFirstChunk = false
+      try {
+        const handleChunk = (chunk: { content?: string; reasoning?: string }) => {
+          // 思考过程：持续追加
+          if (chunk.reasoning) {
+            dispatch({ type: "APPEND_REASONING", id: aiMsgId, text: chunk.reasoning, conversationId: convId })
           }
-
-          dispatch({ type: "SET_TYPING", value: false })
-          dispatch({ type: "ADD_MESSAGE", message: aiMsg })
-        } finally {
-          setTimeout(() => textareaRef.current?.focus(), 50)
-        }
-      } else {
-        // ===== 普通模式：流式 API 调用 =====
-
-        // 确保有活跃会话（首次使用时自动创建）
-        let convId = state.activeConversationId
-        if (!convId) {
-          try {
-            const summary = await createConversation("新对话")
-            convId = summary.id
-            dispatch({ type: "ADD_REMOTE_CONVERSATION", summary })
-          } catch {
-            // 后端不可用时本地降级
-            const fallback: ConversationSummary = {
-              id: genId(),
-              title: "新对话",
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-              message_count: 0,
-            }
-            convId = fallback.id
-            dispatch({ type: "ADD_REMOTE_CONVERSATION", summary: fallback })
-          }
-        }
-
-        // 同一会话内重复发送才取消上一个流，跨会话互不干扰
-        if (streamingConvIdsRef.current.has(convId)) {
-          abortControllersRef.current.get(convId)?.abort()
-        }
-        streamingConvIdsRef.current.add(convId)
-        setStreamingConvId(convId)
-        const ac = new AbortController()
-        abortControllersRef.current.set(convId, ac)
-
-        // 插入占位气泡
-        const aiMsgId = genId()
-        dispatch({
-          type: "ADD_MESSAGE",
-          message: {
-            id: aiMsgId,
-            role: "ai",
-            text: thinkingEnabled ? "美味深度制造中" : "美味即将到来",
-            hasSource: false,
-            sources: null,
-            time: new Date().toISOString(),
-          },
-        })
-
-        let receivedFirstChunk = false
-        try {
-          // 只传 conversation_id + 当前消息，历史由后端管理
-          await chatStream(convId, query, (chunk) => {
+          // 回答内容：首次替换占位，后续追加
+          if (chunk.content) {
             if (!receivedFirstChunk) {
               receivedFirstChunk = true
-              // 始终更新对应会话缓存；若已切到其它会话，reducer 只更新缓存不渲染
-              dispatch({ type: "SET_MESSAGE_TEXT", id: aiMsgId, text: chunk, conversationId: convId })
+              dispatch({ type: "SET_MESSAGE_TEXT", id: aiMsgId, text: chunk.content, conversationId: convId })
             } else {
-              dispatch({ type: "APPEND_TO_MESSAGE", id: aiMsgId, text: chunk, conversationId: convId })
+              dispatch({ type: "APPEND_TO_MESSAGE", id: aiMsgId, text: chunk.content, conversationId: convId })
             }
-          }, ac.signal, thinkingEnabled)
-        } catch (err) {
-          // AbortError 是正常取消，不展示错误
-          if (err instanceof DOMException && err.name === "AbortError") return
-          // 始终写入对应会话缓存（活跃时渲染到视图，非活跃时切回可见）
-          dispatch({
-            type: "SET_MESSAGE_TEXT",
-            id: aiMsgId,
-            text: `⚠️ ${err instanceof Error ? err.message : "请求失败，请稍后重试"}`,
-            conversationId: convId,
-          })
-        } finally {
-          // 清理该会话的流式状态
-          streamingConvIdsRef.current.delete(convId)
-          abortControllersRef.current.delete(convId)
-          setStreamingConvId((current) => (current === convId ? null : current))
-          setTimeout(() => textareaRef.current?.focus(), 50)
+          }
         }
+
+        if (useRag) {
+          // ===== 增强模式：RAG 流式 API =====
+          await ragChatStream(convId, query, state.selectedKBIds, handleChunk, ac.signal, thinkingEnabled)
+        } else {
+          // ===== 普通模式：流式 API =====
+          await chatStream(convId, query, handleChunk, ac.signal, thinkingEnabled)
+        }
+      } catch (err) {
+        // AbortError 是正常取消，不展示错误
+        if (err instanceof DOMException && err.name === "AbortError") return
+        // 始终写入对应会话缓存（活跃时渲染到视图，非活跃时切回可见）
+        dispatch({
+          type: "SET_MESSAGE_TEXT",
+          id: aiMsgId,
+          text: `⚠️ ${err instanceof Error ? err.message : "请求失败，请稍后重试"}`,
+          conversationId: convId,
+        })
+      } finally {
+        // 清理该会话的流式状态
+        streamingConvIdsRef.current.delete(convId)
+        abortControllersRef.current.delete(convId)
+        setStreamingConvId((current) => (current === convId ? null : current))
+        setTimeout(() => textareaRef.current?.focus(), 50)
       }
     },
-    [state.isTyping, state.messages, state.activeConversationId, isEnhanced, activeKBs, thinkingEnabled, dispatch]
+    [state.isTyping, state.activeConversationId, isEnhanced, state.selectedKBIds, thinkingEnabled, dispatch]
   )
-
-  // Poll for pending queries from welcome chips
-  const checkPending = useRef(false)
-  if (!checkPending.current) {
-    checkPending.current = true
-    const poll = () => {
-      if (_pendingQuery) {
-        const q = _pendingQuery
-        _pendingQuery = null
-        void doSend(q)
-      }
-      requestAnimationFrame(poll)
-    }
-    requestAnimationFrame(poll)
-  }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -212,8 +205,9 @@ export function ChatInput() {
 
   return (
     <div className="px-4 md:px-7 pt-2 md:pt-3 pb-3 md:pb-5 border-t border-thread bg-white flex-shrink-0">
-      {/* 模式切换行 */}
-      <div className="flex items-center justify-between mb-2 gap-2">
+      <div className="max-w-4xl mx-auto">
+        {/* 模式切换行 */}
+        <div className="flex items-center justify-between mb-2 gap-2">
         <div className="flex items-center gap-1.5 bg-parchment rounded-lg p-0.5">
           <button
             onClick={() => handleModeSwitch("normal")}
@@ -244,20 +238,20 @@ export function ChatInput() {
                   <span className="text-[11px] font-semibold text-ink-muted tracking-wide">
                     选择要搜索的知识库
                   </span>
-                  {state.knowledgeBases.filter(kb => kb.documents.length > 0).length === 0 && (
+                  {state.knowledgeBases.filter(kb => kb.docCount > 0).length === 0 && (
                     <p className="text-[11px] text-ink-faint mt-0.5">
                       暂无可用知识库，请先在管理端添加文档
                     </p>
                   )}
                 </div>
                 <div className="overflow-y-auto py-1 custom-scroll" style={{ maxHeight: "180px" }}>
-                  {state.knowledgeBases.filter(kb => kb.documents.length > 0).length === 0 ? (
+                  {state.knowledgeBases.filter(kb => kb.docCount > 0).length === 0 ? (
                     <div className="px-3 py-4 text-center">
                       <span className="text-[12px] text-ink-faint">暂无知识库</span>
                     </div>
                   ) : (
                     state.knowledgeBases
-                      .filter(kb => kb.documents.length > 0)
+                      .filter(kb => kb.docCount > 0)
                       .map((kb) => {
                         const checked = state.selectedKBIds.includes(kb.id)
                         return (
@@ -276,7 +270,7 @@ export function ChatInput() {
                                 {kb.name}
                               </div>
                               <div className="text-[10px] text-ink-faint">
-                                {kb.documents.length} 篇文档
+                                {kb.docCount} 篇文档
                               </div>
                             </div>
                           </label>
@@ -362,6 +356,7 @@ export function ChatInput() {
             <polygon points="22 2 15 22 11 13 2 9 22 2" />
           </svg>
         </button>
+      </div>
       </div>
     </div>
   )

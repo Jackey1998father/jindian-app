@@ -62,3 +62,85 @@
   background: #EBE3D8;
   border-radius: 4px;
 }
+
+/* ===== 登录页渐进式动画 ===== */
+
+/* 卡片入场：从下方淡入 */
+@keyframes login-card-in {
+  from { opacity: 0; transform: translateY(32px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 元素逐条淡入上移 */
+@keyframes login-item-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Logo 微呼吸 */
+@keyframes login-logo-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.04); }
+}
+
+/* 背景光晕缓慢漂移 */
+@keyframes login-bg-drift {
+  0%   { background-position: 0% 0%, 100% 100%; }
+  50%  { background-position: 20% 10%, 80% 90%; }
+  100% { background-position: 0% 0%, 100% 100%; }
+}
+
+/* 错误抖动 */
+@keyframes login-shake {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-6px); }
+  40%      { transform: translateX(6px); }
+  60%      { transform: translateX(-4px); }
+  80%      { transform: translateX(4px); }
+}
+
+/* 按钮 loading 圆点跳动 */
+@keyframes login-dot-bounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40%           { transform: translateY(-4px); }
+}
+
+/* 登录成功 → 卡片退出 */
+@keyframes login-card-out {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(1.05); }
+}
+
+/* 主应用入场 */
+@keyframes app-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* 成功勾的描边动画 */
+@keyframes login-check-draw {
+  from { stroke-dashoffset: 24; }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* ===== 工具类 ===== */
+.animate-login-card    { animation: login-card-in  0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-login-item    { animation: login-item-in  0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-login-shake   { animation: login-shake    0.5s ease both; }
+.animate-login-card-out{ animation: login-card-out 0.4s ease-in both; }
+.animate-app-in        { animation: app-fade-in    0.5s ease-out both; }
+.animate-logo-breathe  { animation: login-logo-breathe 4s ease-in-out infinite; }
+.animate-dot-bounce    { animation: login-dot-bounce 1.2s ease-in-out infinite; }
+
+/* 入场延迟工具 */
+.login-delay-1 { animation-delay: 0.05s; }
+.login-delay-2 { animation-delay: 0.15s; }
+.login-delay-3 { animation-delay: 0.25s; }
+.login-delay-4 { animation-delay: 0.35s; }
+.login-delay-5 { animation-delay: 0.45s; }
+
+/* 登录页背景光晕动画 */
+.login-bg-animated {
+  background-size: 60% 60%, 50% 50%;
+  animation: login-bg-drift 20s ease-in-out infinite;
+}

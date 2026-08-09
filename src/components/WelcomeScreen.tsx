@@ -8,6 +8,7 @@ const QUICK_CHIPS = [
 export function WelcomeScreen({
   onChipClick,
 }: {
+  /** 点击快捷标签时调用，传入完整问题文本（只填入输入框，不自动发送） */
   onChipClick: (query: string) => void
 }) {
   return (

@@ -1,27 +1,43 @@
 export type DocFileType = "pdf" | "txt" | "ppt" | "docx" | "doc" | "csv" | "xlsx"
 
+/** 后端返回的文档 */
 export interface Document {
   id: string
+  kb_id: string
   title: string
-  content: string
-  fileName: string
-  fileType: DocFileType
-  fileSize: number
-  createdAt: string
+  file_name: string
+  file_type: DocFileType
+  file_size: number
+  parse_status: number       // 0=待解析 1=解析中 2=已完成 3=失败
+  content_text?: string | null
+  created_at?: string
 }
 
+/** 后端返回的知识库摘要（不含文档列表） */
+export interface KnowledgeBaseSummary {
+  id: string
+  name: string
+  description: string
+  doc_count: number
+  created_at?: string
+  updated_at?: string
+}
+
+/** 前端用的知识库（兼容旧字段） */
 export interface KnowledgeBase {
   id: string
   name: string
   description: string
-  documents: Document[]
+  docCount: number
   createdAt: string
+  updatedAt: string
 }
 
 export interface ChatMessage {
   id: string
   role: "user" | "ai"
   text: string
+  reasoning?: string    // DeepSeek 思考过程（增强/普通模式共用）
   hasSource: boolean
   sources: string | null
   time: string

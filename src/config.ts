@@ -7,10 +7,14 @@ export const API_CONFIG = {
   loginPath: "/api/v1/login",
   /** 聊天接口（流式） */
   chatPath: "/api/v1/chat",
+  /** RAG 增强聊天接口（流式） */
+  ragChatPath: "/api/v1/rag/chat",
   /** 会话列表 */
   conversationsPath: "/api/v1/conversations",
   /** 消息列表 */
   messagesPath: "/api/v1/messages",
+  /** 知识库 */
+  knowledgeBasesPath: "/api/v1/knowledge-bases",
   /** 系统提示词（后端决定是否使用） */
   systemPrompt: "你是锦点餐饮公司的智能回答助手",
   /** 流式请求 */
@@ -31,6 +35,11 @@ export function getChatURL(): string {
   return api(API_CONFIG.chatPath)
 }
 
+/** 获取 RAG 增强聊天 API URL */
+export function getRagChatURL(): string {
+  return api(API_CONFIG.ragChatPath)
+}
+
 /** 获取会话列表/创建 API URL */
 export function getConversationsURL(): string {
   return api(API_CONFIG.conversationsPath)
@@ -44,4 +53,26 @@ export function getConversationURL(conversationId: string): string {
 /** 获取消息列表 API URL */
 export function getMessagesURL(conversationId: string): string {
   return `${api(API_CONFIG.messagesPath)}/${conversationId}`
+}
+
+// ===== 知识库 API =====
+
+/** 获取知识库列表/创建 API URL */
+export function getKnowledgeBasesURL(): string {
+  return api(API_CONFIG.knowledgeBasesPath)
+}
+
+/** 获取指定知识库的操作 URL */
+export function getKnowledgeBaseURL(kbId: string): string {
+  return `${api(API_CONFIG.knowledgeBasesPath)}/${kbId}`
+}
+
+/** 获取知识库下文档列表/上传 API URL */
+export function getDocumentsURL(kbId: string): string {
+  return `${api(API_CONFIG.knowledgeBasesPath)}/${kbId}/documents`
+}
+
+/** 获取单个文档的操作 URL */
+export function getDocumentURL(docId: string): string {
+  return api(`/api/v1/documents/${docId}`)
 }

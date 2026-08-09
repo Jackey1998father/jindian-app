@@ -1,7 +1,7 @@
 import { useApp } from "@/components/AppContext"
 import { ChatMessage } from "@/components/ChatMessage"
 import { WelcomeScreen } from "@/components/WelcomeScreen"
-import { ChatInput, requestSend } from "@/components/ChatInput"
+import { ChatInput, requestFill } from "@/components/ChatInput"
 import { TypingIndicator } from "@/components/TypingIndicator"
 import { useEffect, useRef } from "react"
 
@@ -35,17 +35,19 @@ export function ChatView() {
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 md:px-7 py-4 md:py-6 flex flex-col gap-4 md:gap-5 custom-scroll"
+        className="flex-1 overflow-y-auto px-4 md:px-7 py-4 md:py-6 custom-scroll"
       >
-        {state.messages.length === 0 && (
-          <WelcomeScreen onChipClick={requestSend} />
-        )}
+        <div className="max-w-4xl mx-auto w-full flex flex-col gap-4 md:gap-5">
+          {state.messages.length === 0 && (
+            <WelcomeScreen onChipClick={requestFill} />
+          )}
 
-        {state.messages.map((msg) => (
-          <ChatMessage key={msg.id} message={msg} />
-        ))}
+          {state.messages.map((msg) => (
+            <ChatMessage key={msg.id} message={msg} />
+          ))}
 
-        <TypingIndicator visible={state.isTyping} />
+          <TypingIndicator visible={state.isTyping} />
+        </div>
       </div>
 
       <ChatInput />

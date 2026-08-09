@@ -2,11 +2,25 @@ import { useApp } from "@/components/AppContext"
 import { KBCard } from "@/components/KBCard"
 import { Modal } from "@/components/Modal"
 import { GenKBForm } from "@/components/GenKBForm"
+import { createKnowledgeBase } from "@/hooks/useApp"
 import { useState } from "react"
 
 export function KBListView() {
   const { state, dispatch } = useApp()
   const [showForm, setShowForm] = useState(false)
+
+  const handleCreate = async (name: string, desc: string) => {
+    try {
+      await createKnowledgeBase(name, desc, dispatch)
+      dispatch({
+        type: "ADD_TOAST",
+        toast: { id: Date.now().toString(), message: `知识库「${name}」已创建`, type: "success" },
+      })
+      setShowForm(false)
+    } catch {
+      // 错误已在 createKnowledgeBase 中处理
+    }
+  }
 
   return (
     <main className="flex flex-col flex-1 overflow-hidden">
@@ -24,8 +38,15 @@ export function KBListView() {
           </button>
         </div>
 
+        {/* Loading */}
+        {state.kbLoading && (
+          <div className="flex items-center justify-center py-16">
+            <span className="text-sm text-ink-muted">加载中…</span>
+          </div>
+        )}
+
         {/* Grid */}
-        {state.knowledgeBases.length === 0 ? (
+        {!state.kbLoading && state.knowledgeBases.length === 0 ? (
           <div className="flex flex-col items-center text-center py-12 md:py-16">
             <div className="w-16 h-16 md:w-[72px] md:h-[72px] rounded-2xl bg-parchment flex items-center justify-center text-[28px] md:text-[32px] mb-4 md:mb-5">
               📭
@@ -55,14 +76,7 @@ export function KBListView() {
       {/* Modal */}
       <Modal open={showForm} onClose={() => setShowForm(false)}>
         <GenKBForm
-          onSubmit={(name, desc) => {
-            dispatch({ type: "ADD_KB", name, description: desc })
-            dispatch({
-              type: "ADD_TOAST",
-              toast: { id: Date.now().toString(), message: `知识库「${name}」已创建`, type: "success" },
-            })
-            setShowForm(false)
-          }}
+          onSubmit={handleCreate}
           onCancel={() => setShowForm(false)}
         />
       </Modal>

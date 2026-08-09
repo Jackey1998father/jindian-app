@@ -25,7 +25,7 @@ export default function App() {
   // 已登录 → 显示主应用
   return (
     <AppCtx value={{ state, dispatch }}>
-      <div className="flex flex-col h-screen w-full bg-white shadow-[0_0_0_1px_#F3EDE6]">
+      <div className="flex flex-col h-screen w-full bg-white shadow-[0_0_0_1px_#F3EDE6] animate-app-in">
         <ToastContainer />
         <Header onMenuClick={() => setSidebarOpen(true)} />
 

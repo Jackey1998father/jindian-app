@@ -1,7 +1,8 @@
-import { useState, useRef, type DragEvent, type ChangeEvent } from "react"
+import { useState, useRef, useEffect, type DragEvent, type ChangeEvent } from "react"
 import { useApp } from "@/components/AppContext"
 import { DocCard } from "@/components/DocCard"
 import { Modal } from "@/components/Modal"
+import { loadDocumentsForKB, uploadDocumentToKB, deleteDocumentFromKB } from "@/hooks/useApp"
 import type { DocFileType } from "@/types"
 
 const DOC_ACCEPT = ".pdf,.txt,.ppt,.pptx,.doc,.docx"
@@ -21,28 +22,6 @@ function getFileType(file: File): DocFileType {
   return "txt"
 }
 
-async function readFileText(file: File): Promise<string> {
-  // txt 和 csv 直接读取文本内容
-  if (file.name.endsWith(".txt") || file.name.endsWith(".csv")) {
-    return new Promise((resolve) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result as string)
-      reader.onerror = () => resolve("")
-      reader.readAsText(file)
-    })
-  }
-  // 二进制格式读取为 base64（前端预览用），实际内容标记为"已上传"
-  return new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const base64 = (reader.result as string).split(",")[1] || ""
-      resolve(`[文件已上传] 文件名: ${file.name}\n类型: ${file.type || "未知"}\n大小: ${(file.size / 1024).toFixed(1)} KB\n\n注：${file.name.endsWith(".pdf") ? "PDF" : file.name.endsWith(".pptx") || file.name.endsWith(".ppt") ? "PPT" : "Office"} 文件已存储，文本提取需后端支持。当前可基于文件名和元数据进行检索。`)
-    }
-    reader.onerror = () => resolve(`[文件已上传] ${file.name}`)
-    reader.readAsDataURL(file)
-  })
-}
-
 export function KBDetailView() {
   const { state, dispatch } = useApp()
   const kb = state.knowledgeBases.find((k) => k.id === state.currentKBId)
@@ -52,6 +31,19 @@ export function KBDetailView() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const docsLoadedRef = useRef(false)
+
+  // 进入详情页时加载文档列表
+  useEffect(() => {
+    if (kb && !docsLoadedRef.current) {
+      docsLoadedRef.current = true
+      loadDocumentsForKB(kb.id, dispatch)
+    }
+    // 离开时重置标记
+    return () => {
+      docsLoadedRef.current = false
+    }
+  }, [kb?.id])
 
   if (!kb) {
     dispatch({ type: "SWITCH_VIEW", view: "kb-list" })
@@ -108,40 +100,38 @@ export function KBDetailView() {
     if (selectedFiles.length === 0) return
     setUploading(true)
 
+    let successCount = 0
     for (const file of selectedFiles) {
-      const content = await readFileText(file)
-      const fileType = getFileType(file)
-      const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "")
-      dispatch({
-        type: "ADD_DOC",
-        kbId: kb.id,
-        title: nameWithoutExt,
-        content,
-        fileName: file.name,
-        fileType,
-        fileSize: file.size,
-      })
+      const doc = await uploadDocumentToKB(kb.id, file, dispatch)
+      if (doc) successCount++
     }
 
-    dispatch({
-      type: "ADD_TOAST",
-      toast: { id: Date.now().toString(), message: `已添加 ${selectedFiles.length} 个文档`, type: "success" },
-    })
+    if (successCount > 0) {
+      dispatch({
+        type: "ADD_TOAST",
+        toast: { id: Date.now().toString(), message: `成功上传 ${successCount} 个文档`, type: "success" },
+      })
+    }
 
     setSelectedFiles([])
     setUploading(false)
     setShowUpload(false)
   }
 
-  const handleDeleteDoc = (docId: string, docTitle: string) => {
-    if (window.confirm(`确定删除文档「${docTitle}」吗？删除后不可恢复。`)) {
-      dispatch({ type: "DELETE_DOC", kbId: kb.id, docId })
+  const handleDeleteDoc = async (docId: string, docTitle: string) => {
+    if (!window.confirm(`确定删除文档「${docTitle}」吗？删除后不可恢复。`)) return
+    try {
+      await deleteDocumentFromKB(docId, kb.id, dispatch)
       dispatch({
         type: "ADD_TOAST",
         toast: { id: Date.now().toString(), message: `文档「${docTitle}」已删除`, type: "info" },
       })
+    } catch {
+      // 错误已在 deleteDocumentFromKB 中处理
     }
   }
+
+  const docs = state.currentKBDocuments
 
   return (
     <main className="flex flex-col flex-1 overflow-hidden">
@@ -161,7 +151,7 @@ export function KBDetailView() {
         </h3>
 
         <span className="hidden sm:inline text-xs font-medium text-ink-muted mr-1 md:mr-2">
-          {kb.documents.length} 篇文档
+          {kb.docCount} 篇文档
         </span>
 
         <button
@@ -184,7 +174,11 @@ export function KBDetailView() {
 
       {/* Document list */}
       <div className="flex-1 overflow-y-auto p-3 md:p-5 px-4 md:px-7 custom-scroll flex flex-col gap-2 md:gap-2.5">
-        {kb.documents.length === 0 ? (
+        {state.docsLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <span className="text-sm text-ink-muted">加载中…</span>
+          </div>
+        ) : docs.length === 0 ? (
           <div className="flex flex-col items-center text-center py-12 md:py-16">
             <div className="w-16 h-16 md:w-[72px] md:h-[72px] rounded-2xl bg-parchment flex items-center justify-center text-[28px] md:text-[32px] mb-4 md:mb-5">
               📂
@@ -212,11 +206,11 @@ export function KBDetailView() {
             </button>
           </div>
         ) : (
-          kb.documents.map((doc) => (
+          docs.map((doc) => (
             <DocCard
               key={doc.id}
               doc={doc}
-              onDelete={() => handleDeleteDoc(doc.id, doc.fileName || doc.title)}
+              onDelete={() => handleDeleteDoc(doc.id, doc.file_name || doc.title)}
             />
           ))
         )}

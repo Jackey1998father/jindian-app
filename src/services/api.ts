@@ -1,10 +1,22 @@
-import type { ChatMessage, User, ConversationSummary, ApiMessageItem } from "@/types"
+import type {
+  ChatMessage,
+  User,
+  ConversationSummary,
+  ApiMessageItem,
+  KnowledgeBaseSummary,
+  Document,
+} from "@/types"
 import {
   getChatURL,
+  getRagChatURL,
   getLoginURL,
   getConversationsURL,
   getConversationURL,
   getMessagesURL,
+  getKnowledgeBasesURL,
+  getKnowledgeBaseURL,
+  getDocumentsURL,
+  getDocumentURL,
 } from "@/config"
 import { loadToken } from "@/services/storage"
 
@@ -15,6 +27,14 @@ function authHeaders(): Record<string, string> {
   const token = loadToken()
   return {
     "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+}
+
+/** 不带 Content-Type 的认证头（FormData 上传用） */
+function authHeadersNoCT(): Record<string, string> {
+  const token = loadToken()
+  return {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }
 }
@@ -167,7 +187,7 @@ export function toChatMessages(items: ApiMessageItem[]): ChatMessage[] {
 export async function chatStream(
   conversationId: string,
   message: string,
-  onChunk: (text: string) => void,
+  onChunk: (chunk: { content?: string; reasoning?: string }) => void,
   signal?: AbortSignal,
   thinking?: boolean,
 ): Promise<string> {
@@ -229,10 +249,12 @@ export async function chatStream(
 
         try {
           const chunk = JSON.parse(data)
-          const content = chunk.choices?.[0]?.delta?.content
-          if (content) {
-            fullText += content
-            onChunk(content)
+          const delta = chunk.choices?.[0]?.delta
+          const content: string | undefined = delta?.content
+          const reasoning: string | undefined = delta?.reasoning_content
+          if (content || reasoning) {
+            if (content) fullText += content
+            onChunk({ content, reasoning })
           }
         } catch {
           // 跳过无法解析的行
@@ -244,4 +266,224 @@ export async function chatStream(
     try { reader.cancel() } catch { /* 忽略 */ }
   }
   return fullText
+}
+
+/**
+ * RAG 增强流式聊天
+ * 调用 /api/v1/rag/chat，携带 kb_ids 和 use_rag 参数
+ * @param conversationId 会话 ID
+ * @param message 用户当前消息文本
+ * @param kbIds 选中的知识库 ID 列表
+ * @param onChunk 每收到一个文本块时回调
+ * @param signal 可选 AbortSignal，用于取消请求
+ * @returns 完整响应文本
+ */
+export async function ragChatStream(
+  conversationId: string,
+  message: string,
+  kbIds: string[],
+  onChunk: (chunk: { content?: string; reasoning?: string }) => void,
+  signal?: AbortSignal,
+  thinking?: boolean,
+): Promise<string> {
+  const response = await fetch(getRagChatURL(), {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      conversation_id: conversationId,
+      message,
+      kb_ids: kbIds,
+      use_rag: true,
+      ...(thinking ? { thinking: true } : {}),
+    }),
+    signal,
+  })
+
+  if (!response.ok) {
+    throw new Error(await extractError(response))
+  }
+
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error("不支持流式响应")
+
+  const decoder = new TextDecoder()
+  let fullText = ""
+  let buffer = ""
+
+  // 兜底：每个 read 加一个独立的超时（默认 90s），避免上游不发 [DONE] 时永久阻塞
+  const CHUNK_TIMEOUT_MS = 90_000
+
+  try {
+    while (true) {
+      // 提前检查是否已被取消
+      if (signal?.aborted) break
+
+      // read 阶段单独加超时：超时后主动 cancel reader 并抛错
+      const readPromise = reader.read()
+      const timeoutPromise = new Promise<{ __timeout: true }>((resolve) =>
+        setTimeout(() => resolve({ __timeout: true }), CHUNK_TIMEOUT_MS),
+      )
+      const result = await Promise.race([readPromise, timeoutPromise])
+
+      if ("__timeout" in result) {
+        try { await reader.cancel() } catch { /* ignore */ }
+        throw new Error("模型响应超时，请稍后重试")
+      }
+
+      const { done, value } = result
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split("\n")
+      buffer = lines.pop() || ""
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || !trimmed.startsWith("data: ")) continue
+
+        const data = trimmed.slice(6)
+        if (data === "[DONE]") return fullText
+
+        try {
+          const chunk = JSON.parse(data)
+          const delta = chunk.choices?.[0]?.delta
+          const content: string | undefined = delta?.content
+          const reasoning: string | undefined = delta?.reasoning_content
+          if (content || reasoning) {
+            if (content) fullText += content
+            onChunk({ content, reasoning })
+          }
+        } catch {
+          // 跳过无法解析的行
+        }
+      }
+    }
+  } finally {
+    // 异常/取消分支也释放 reader
+    try { reader.cancel() } catch { /* 忽略 */ }
+  }
+  return fullText
+}
+
+// ========== 知识库管理 ==========
+
+/** 获取知识库列表 */
+export async function fetchKnowledgeBases(): Promise<KnowledgeBaseSummary[]> {
+  const response = await fetch(getKnowledgeBasesURL(), {
+    headers: authHeaders(),
+  })
+
+  if (!response.ok) {
+    throw new Error(await extractError(response))
+  }
+
+  const result = await response.json()
+  if (result.code !== 0) {
+    throw new Error(result.message || "获取知识库列表失败")
+  }
+
+  return result.data || []
+}
+
+/** 创建知识库 */
+export async function apiCreateKB(
+  name: string,
+  description: string,
+): Promise<KnowledgeBaseSummary> {
+  const response = await fetch(getKnowledgeBasesURL(), {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ name, description }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await extractError(response))
+  }
+
+  const result = await response.json()
+  if (result.code !== 0) {
+    throw new Error(result.message || "创建知识库失败")
+  }
+
+  return result.data
+}
+
+/** 删除知识库 */
+export async function apiDeleteKB(kbId: string): Promise<void> {
+  const response = await fetch(getKnowledgeBaseURL(kbId), {
+    method: "DELETE",
+    headers: authHeaders(),
+  })
+
+  if (!response.ok) {
+    throw new Error(await extractError(response))
+  }
+
+  const result = await response.json()
+  if (result.code !== 0) {
+    throw new Error(result.message || "删除知识库失败")
+  }
+}
+
+// ========== 文档管理 ==========
+
+/** 获取知识库下的文档列表 */
+export async function fetchDocuments(kbId: string): Promise<Document[]> {
+  const response = await fetch(getDocumentsURL(kbId), {
+    headers: authHeaders(),
+  })
+
+  if (!response.ok) {
+    throw new Error(await extractError(response))
+  }
+
+  const result = await response.json()
+  if (result.code !== 0) {
+    throw new Error(result.message || "获取文档列表失败")
+  }
+
+  return result.data || []
+}
+
+/** 上传文档到知识库 */
+export async function apiUploadDocument(
+  kbId: string,
+  file: File,
+): Promise<Document> {
+  const formData = new FormData()
+  formData.append("file", file)
+
+  const response = await fetch(getDocumentsURL(kbId), {
+    method: "POST",
+    headers: authHeadersNoCT(),
+    body: formData,
+  })
+
+  if (!response.ok) {
+    throw new Error(await extractError(response))
+  }
+
+  const result = await response.json()
+  if (result.code !== 0) {
+    throw new Error(result.message || "上传文档失败")
+  }
+
+  return result.data
+}
+
+/** 删除文档 */
+export async function apiDeleteDocument(docId: string): Promise<void> {
+  const response = await fetch(getDocumentURL(docId), {
+    method: "DELETE",
+    headers: authHeaders(),
+  })
+
+  if (!response.ok) {
+    throw new Error(await extractError(response))
+  }
+
+  const result = await response.json()
+  if (result.code !== 0) {
+    throw new Error(result.message || "删除文档失败")
+  }
 }

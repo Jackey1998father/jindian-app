@@ -1,32 +1,7 @@
-import type { KnowledgeBase } from "@/types"
 import type { User } from "@/types"
 
-const KB_KEY = "jindian_knowledge"
 const AUTH_KEY = "jindian_auth"
 const TOKEN_KEY = "jindian_token"
-
-// ========== 知识库（本地存储）==========
-
-export function loadKnowledgeBases(): KnowledgeBase[] {
-  try {
-    const raw = localStorage.getItem(KB_KEY)
-    if (raw) {
-      const data = JSON.parse(raw)
-      return data.knowledgeBases || []
-    }
-  } catch {
-    /* ignore */
-  }
-  return []
-}
-
-export function saveKnowledgeBases(knowledgeBases: KnowledgeBase[]): void {
-  try {
-    localStorage.setItem(KB_KEY, JSON.stringify({ knowledgeBases }))
-  } catch {
-    /* ignore */
-  }
-}
 
 // ========== 认证 ==========
 

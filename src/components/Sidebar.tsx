@@ -33,6 +33,11 @@ export function Sidebar({
   }
 
   const handleSwitch = async (id: string) => {
+    // 如果在管理端，先切回对话页（即使点的是已激活会话也要切）
+    if (state.view !== "chat") {
+      dispatch({ type: "SWITCH_VIEW", view: "chat" })
+    }
+
     if (id === state.activeConversationId) {
       onClose?.()
       return

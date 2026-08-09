@@ -1,4 +1,4 @@
-import type { KnowledgeBase, RAGResult } from "@/types"
+import type { Document, RAGResult } from "@/types"
 
 const STOP_WORDS = new Set([
   "的","了","在","是","我","有","和","就","不","人","都","一","一个","上","也","很","到","说","要","去","你","会","着",
@@ -10,24 +10,25 @@ function extractKeywords(text: string): string[] {
   const cleaned = text.replace(/[，。！？、；：""''（）【】《》\s,\.!\?;:'"()\[\]{}]+/g, "|")
   const segments = cleaned.split("|").filter((s) => s.length >= 2)
   const keywords = segments.filter((s) => !STOP_WORDS.has(s))
-  const chars = text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, "").split("")
+  const chars = text.replace(/[^一-龥a-zA-Z0-9]/g, "").split("")
   return [...new Set([...keywords, ...chars.filter((c) => !STOP_WORDS.has(c))])]
 }
 
 export function searchRelevant(
   query: string,
-  knowledgeBases: KnowledgeBase[]
+  kbDocs: { kbName: string; kbId: string; documents: Document[] }[]
 ): RAGResult[] {
-  if (!knowledgeBases.length) return []
+  if (!kbDocs.length) return []
   const keywords = extractKeywords(query)
   if (!keywords.length) return []
 
   const results: RAGResult[] = []
-  for (const kb of knowledgeBases) {
+  for (const kb of kbDocs) {
     if (!kb.documents.length) continue
     for (const doc of kb.documents) {
       let score = 0
-      const cL = doc.content.toLowerCase()
+      const contentText = doc.content_text || ""
+      const cL = contentText.toLowerCase()
       const tL = doc.title.toLowerCase()
       for (const kw of keywords) {
         const kwL = kw.toLowerCase()
@@ -37,10 +38,10 @@ export function searchRelevant(
       }
       if (score > 0) {
         results.push({
-          kb: kb.name,
-          kbId: kb.id,
+          kb: kb.kbName,
+          kbId: kb.kbId,
           title: doc.title,
-          content: doc.content,
+          content: contentText,
           score,
         })
       }
@@ -51,9 +52,9 @@ export function searchRelevant(
 
 export function generateAIResponse(
   query: string,
-  knowledgeBases: KnowledgeBase[]
+  kbDocs: { kbName: string; kbId: string; documents: Document[] }[]
 ): { text: string; hasSource: boolean; sources: string | null } {
-  const relevant = searchRelevant(query, knowledgeBases)
+  const relevant = searchRelevant(query, kbDocs)
 
   if (relevant.length > 0) {
     const context = relevant.map((r) => r.content).join("\n")

@@ -1,6 +1,7 @@
 import { type Components } from "react-markdown"
 import ReactMarkdown from "react-markdown"
 import rehypeRaw from "rehype-raw"
+import remarkGfm from "remark-gfm"
 import type { ChatMessage as ChatMessageType } from "@/types"
 import { cn } from "@/lib/utils"
 
@@ -74,27 +75,36 @@ const mdComponents: Partial<Components> = {
   ),
   // 表格
   table: ({ children }) => (
-    <div className="overflow-x-auto my-1.5">
+    <div className="overflow-x-auto my-2 rounded-lg border border-thread">
       <table className="w-full text-sm border-collapse">{children}</table>
     </div>
   ),
   thead: ({ children }) => (
-    <thead className="bg-parchment">{children}</thead>
+    <thead className="bg-parchment border-b border-thread">{children}</thead>
+  ),
+  tbody: ({ children }) => (
+    <tbody className="divide-y divide-thread-light">{children}</tbody>
   ),
   th: ({ children }) => (
-    <th className="border border-thread px-2.5 py-1.5 text-left font-semibold text-ink text-[13px]">
+    <th className="border-r border-thread last:border-r-0 px-3 py-2 text-left font-semibold text-ink text-[13px] whitespace-nowrap">
       {children}
     </th>
   ),
+  tr: ({ children }) => (
+    <tr className="even:bg-parchment/50">{children}</tr>
+  ),
   td: ({ children }) => (
-    <td className="border border-thread px-2.5 py-1.5 text-ink text-[13px]">{children}</td>
+    <td className="border-r border-thread-light last:border-r-0 px-3 py-1.5 text-ink text-[13px]">
+      {children}
+    </td>
   ),
 }
 
 export function ChatMessage({ message }: { message: ChatMessageType }) {
   const isUser = message.role === "user"
   const avatarSrc = isUser ? "/avatars/user-avatar.png" : "/icon-purple.svg"
-  const isWaiting = !isUser && (message.text === "美味即将到来" || message.text === "美味深度制造中")
+  const isWaiting = !isUser && (message.text === "美味即将到来" || message.text === "美味深度制造中" || message.text === "🔍 正在检索知识库...")
+  const hasReasoning = !isUser && message.reasoning
 
   return (
     <div
@@ -142,10 +152,23 @@ export function ChatMessage({ message }: { message: ChatMessageType }) {
             // 用户消息纯文本
             message.text
           ) : (
-            // AI 消息：Markdown 渲染
-            <ReactMarkdown components={mdComponents} rehypePlugins={[rehypeRaw]}>
-              {message.text}
-            </ReactMarkdown>
+            <>
+              {/* 思考过程 — 折叠显示 */}
+              {hasReasoning && (
+                <details className="mb-2" open>
+                  <summary className="text-[11px] font-semibold text-amber-600 cursor-pointer select-none hover:text-amber-700 transition-colors">
+                    🧠 思考过程
+                  </summary>
+                  <pre className="mt-1.5 text-[12px] text-ink-muted leading-relaxed whitespace-pre-wrap bg-amber-50/60 rounded-lg px-3 py-2 border border-amber-100 max-h-[300px] overflow-y-auto custom-scroll">
+                    {message.reasoning}
+                  </pre>
+                </details>
+              )}
+              {/* AI 回答：Markdown 渲染 */}
+              <ReactMarkdown components={mdComponents} remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                {message.text}
+              </ReactMarkdown>
+            </>
           )}
 
           {/* Source badge */}

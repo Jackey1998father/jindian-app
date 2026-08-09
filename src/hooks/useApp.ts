@@ -1,6 +1,7 @@
 import { useReducer, useCallback, useEffect, type Dispatch } from "react"
 import type {
   KnowledgeBase,
+  KnowledgeBaseSummary,
   Document,
   ChatMessage,
   Conversation,
@@ -12,8 +13,6 @@ import type {
   ChatMode,
 } from "@/types"
 import {
-  loadKnowledgeBases,
-  saveKnowledgeBases,
   genId,
   saveAuth,
   loadAuth,
@@ -24,6 +23,12 @@ import {
   deleteConversation as apiDeleteConversation,
   fetchMessages,
   toChatMessages,
+  fetchKnowledgeBases,
+  apiCreateKB,
+  apiDeleteKB,
+  fetchDocuments,
+  apiUploadDocument,
+  apiDeleteDocument,
 } from "@/services/api"
 
 // ========== State ==========
@@ -32,6 +37,12 @@ export interface AppState {
   view: ViewType
   currentKBId: string | null
   knowledgeBases: KnowledgeBase[]
+  /** 当前查看的知识库的文档列表 */
+  currentKBDocuments: Document[]
+  /** 知识库列表是否正在加载 */
+  kbLoading: boolean
+  /** 文档列表是否正在加载 */
+  docsLoading: boolean
   /** 会话列表（只含摘要，消息需要加载） */
   conversations: Conversation[]
   activeConversationId: string
@@ -55,16 +66,22 @@ export type Action =
   // 视图
   | { type: "SWITCH_VIEW"; view: ViewType; kbId?: string | null }
   // 知识库
-  | { type: "ADD_KB"; name: string; description: string }
-  | { type: "DELETE_KB"; id: string }
-  | { type: "ADD_DOC"; kbId: string; title: string; content: string; fileName: string; fileType: DocFileType; fileSize: number }
-  | { type: "DELETE_DOC"; kbId: string; docId: string }
+  | { type: "SET_KBS_LOADING"; loading: boolean }
+  | { type: "LOAD_KBS"; items: KnowledgeBaseSummary[] }
+  | { type: "ADD_KB_ITEM"; item: KnowledgeBaseSummary }
+  | { type: "REMOVE_KB_ITEM"; id: string }
+  // 文档
+  | { type: "SET_DOCS_LOADING"; loading: boolean }
+  | { type: "LOAD_DOCS"; kbId: string; docs: Document[] }
+  | { type: "ADD_DOC_ITEM"; doc: Document }
+  | { type: "REMOVE_DOC_ITEM"; kbId: string; docId: string }
   // 消息
   | { type: "ADD_MESSAGE"; message: ChatMessage }
   | { type: "SET_LAST_MESSAGE_TEXT"; text: string }
   | { type: "APPEND_TO_LAST_MESSAGE"; text: string }
   | { type: "SET_MESSAGE_TEXT"; id: string; text: string; conversationId?: string }
   | { type: "APPEND_TO_MESSAGE"; id: string; text: string; conversationId?: string }
+  | { type: "APPEND_REASONING"; id: string; text: string; conversationId?: string }
   | { type: "SET_TYPING"; value: boolean }
   // 会话
   | { type: "LOAD_CONVERSATIONS"; summaries: ConversationSummary[] }
@@ -85,15 +102,38 @@ export type Action =
   | { type: "ADD_TOAST"; toast: ToastItem }
   | { type: "REMOVE_TOAST"; id: string }
 
+// ========== 辅助：将后端 KB 摘要转为前端 KnowledgeBase ==========
+
+function toKnowledgeBase(s: KnowledgeBaseSummary): KnowledgeBase {
+  return {
+    id: s.id,
+    name: s.name,
+    description: s.description,
+    docCount: s.doc_count,
+    createdAt: s.created_at || "",
+    updatedAt: s.updated_at || "",
+  }
+}
+
 // ========== 初始状态 ==========
 
+/** 从 URL search params 恢复 view（支持刷新保持当前页面） */
+function _getViewFromURL(): ViewType {
+  const p = new URLSearchParams(window.location.search)
+  const v = p.get("view")
+  if (v === "kb-list" || v === "kb-detail") return v
+  return "chat"
+}
+
 const savedUser = loadAuth()
-const savedKBs = loadKnowledgeBases()
 
 const initialState: AppState = {
-  view: "chat",
+  view: _getViewFromURL(),
   currentKBId: null,
-  knowledgeBases: savedKBs,
+  knowledgeBases: [],
+  currentKBDocuments: [],
+  kbLoading: false,
+  docsLoading: false,
   conversations: [],
   activeConversationId: "",
   messages: [],
@@ -113,60 +153,72 @@ const initialState: AppState = {
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     // ---------- 视图 ----------
-    case "SWITCH_VIEW":
+    case "SWITCH_VIEW": {
+      // 同步到 URL，刷新后保持当前页面
+      const url = new URL(window.location.href)
+      url.searchParams.set("view", action.view)
+      if (action.kbId) url.searchParams.set("kbId", action.kbId)
+      else url.searchParams.delete("kbId")
+      window.history.replaceState(null, "", url.toString())
       return { ...state, view: action.view, currentKBId: action.kbId ?? null }
+    }
 
     // ---------- 知识库 ----------
-    case "ADD_KB": {
-      const kb: KnowledgeBase = {
-        id: genId(),
-        name: action.name,
-        description: action.description,
-        documents: [],
-        createdAt: new Date().toISOString(),
-      }
-      const next = { ...state, knowledgeBases: [...state.knowledgeBases, kb] }
-      saveKnowledgeBases(next.knowledgeBases)
-      return next
+    case "SET_KBS_LOADING":
+      return { ...state, kbLoading: action.loading }
+
+    case "LOAD_KBS": {
+      const kbs = action.items.map(toKnowledgeBase)
+      return { ...state, knowledgeBases: kbs, kbLoading: false }
     }
 
-    case "DELETE_KB": {
-      const next = { ...state, knowledgeBases: state.knowledgeBases.filter((k) => k.id !== action.id) }
-      saveKnowledgeBases(next.knowledgeBases)
-      return next
+    case "ADD_KB_ITEM": {
+      const kb = toKnowledgeBase(action.item)
+      return { ...state, knowledgeBases: [kb, ...state.knowledgeBases] }
     }
 
-    case "ADD_DOC": {
-      const doc: Document = {
-        id: genId(),
-        title: action.title,
-        content: action.content,
-        fileName: action.fileName,
-        fileType: action.fileType,
-        fileSize: action.fileSize,
-        createdAt: new Date().toISOString(),
-      }
-      const next = {
+    case "REMOVE_KB_ITEM": {
+      return {
         ...state,
+        knowledgeBases: state.knowledgeBases.filter((k) => k.id !== action.id),
+        selectedKBIds: state.selectedKBIds.filter((id) => id !== action.id),
+      }
+    }
+
+    // ---------- 文档 ----------
+    case "SET_DOCS_LOADING":
+      return { ...state, docsLoading: action.loading }
+
+    case "LOAD_DOCS": {
+      return {
+        ...state,
+        currentKBDocuments: action.docs,
+        docsLoading: false,
+        // 同步更新 knowledgeBases 中的 docCount
         knowledgeBases: state.knowledgeBases.map((kb) =>
-          kb.id === action.kbId ? { ...kb, documents: [...kb.documents, doc] } : kb,
+          kb.id === action.kbId ? { ...kb, docCount: action.docs.length } : kb,
         ),
       }
-      saveKnowledgeBases(next.knowledgeBases)
-      return next
     }
 
-    case "DELETE_DOC": {
-      const next = {
+    case "ADD_DOC_ITEM": {
+      return {
         ...state,
+        currentKBDocuments: [action.doc, ...state.currentKBDocuments],
         knowledgeBases: state.knowledgeBases.map((kb) =>
-          kb.id === action.kbId
-            ? { ...kb, documents: kb.documents.filter((d) => d.id !== action.docId) }
-            : kb,
+          kb.id === action.doc.kb_id ? { ...kb, docCount: kb.docCount + 1 } : kb,
         ),
       }
-      saveKnowledgeBases(next.knowledgeBases)
-      return next
+    }
+
+    case "REMOVE_DOC_ITEM": {
+      return {
+        ...state,
+        currentKBDocuments: state.currentKBDocuments.filter((d) => d.id !== action.docId),
+        knowledgeBases: state.knowledgeBases.map((kb) =>
+          kb.id === action.kbId ? { ...kb, docCount: Math.max(0, kb.docCount - 1) } : kb,
+        ),
+      }
     }
 
     // ---------- 消息 ----------
@@ -220,7 +272,6 @@ function reducer(state: AppState, action: Action): AppState {
 
     case "SET_MESSAGE_TEXT": {
       const targetConvId = action.conversationId ?? state.activeConversationId
-      // 非活跃会话：只更新 conversations 缓存，不碰 state.messages
       if (targetConvId !== state.activeConversationId) {
         return {
           ...state,
@@ -236,7 +287,6 @@ function reducer(state: AppState, action: Action): AppState {
           }),
         }
       }
-      // 活跃会话：同时更新 state.messages 和 conversations 缓存
       const idx = state.messages.findIndex((m) => m.id === action.id)
       if (idx === -1) return state
       const updated = [...state.messages]
@@ -254,7 +304,6 @@ function reducer(state: AppState, action: Action): AppState {
 
     case "APPEND_TO_MESSAGE": {
       const targetConvId = action.conversationId ?? state.activeConversationId
-      // 非活跃会话：只更新 conversations 缓存
       if (targetConvId !== state.activeConversationId) {
         return {
           ...state,
@@ -270,11 +319,42 @@ function reducer(state: AppState, action: Action): AppState {
           }),
         }
       }
-      // 活跃会话：同时更新 state.messages 和 conversations 缓存
       const idx = state.messages.findIndex((m) => m.id === action.id)
       if (idx === -1) return state
       const updated = [...state.messages]
       updated[idx] = { ...updated[idx], text: updated[idx].text + action.text }
+      return {
+        ...state,
+        messages: updated,
+        conversations: state.conversations.map((c) =>
+          c.id === state.activeConversationId
+            ? { ...c, messages: updated, updatedAt: new Date().toISOString() }
+            : c,
+        ),
+      }
+    }
+
+    case "APPEND_REASONING": {
+      const targetConvId = action.conversationId ?? state.activeConversationId
+      if (targetConvId !== state.activeConversationId) {
+        return {
+          ...state,
+          conversations: state.conversations.map((c) => {
+            if (c.id !== targetConvId) return c
+            return {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === action.id ? { ...m, reasoning: (m.reasoning || "") + action.text } : m,
+              ),
+              updatedAt: new Date().toISOString(),
+            }
+          }),
+        }
+      }
+      const idx = state.messages.findIndex((m) => m.id === action.id)
+      if (idx === -1) return state
+      const updated = [...state.messages]
+      updated[idx] = { ...updated[idx], reasoning: (updated[idx].reasoning || "") + action.text }
       return {
         ...state,
         messages: updated,
@@ -300,7 +380,6 @@ function reducer(state: AppState, action: Action): AppState {
         messageCount: s.message_count,
         messagesLoaded: false,
       }))
-      // 保持当前活跃会话和消息
       const activeExists = convs.some((c) => c.id === state.activeConversationId)
       const activeConvId = activeExists ? state.activeConversationId : (convs[0]?.id ?? "")
       const messages = activeExists ? state.messages : []
@@ -341,7 +420,7 @@ function reducer(state: AppState, action: Action): AppState {
         createdAt: action.summary.created_at,
         updatedAt: action.summary.updated_at,
         messageCount: 0,
-        messagesLoaded: true, // 新会话没有消息，视为已加载
+        messagesLoaded: true,
       }
       return {
         ...state,
@@ -354,7 +433,6 @@ function reducer(state: AppState, action: Action): AppState {
 
     case "REMOVE_CONVERSATION": {
       const filtered = state.conversations.filter((c) => c.id !== action.id)
-      // 至少保留一个会话，不允许全部删除
       if (filtered.length === 0) return state
       if (action.id === state.activeConversationId) {
         return {
@@ -379,7 +457,9 @@ function reducer(state: AppState, action: Action): AppState {
     // ---------- 认证 ----------
     case "LOGIN":
       saveAuth(action.user)
-      return { ...state, isLoggedIn: true, user: action.user, loginError: null }
+      // 登录时清掉 URL 参数 + 重置 view，确保进入对话页
+      window.history.replaceState(null, "", window.location.pathname)
+      return { ...state, view: "chat", isLoggedIn: true, user: action.user, loginError: null }
 
     case "SET_LOGIN_ERROR":
       return { ...state, loginError: action.error }
@@ -395,7 +475,7 @@ function reducer(state: AppState, action: Action): AppState {
         chatMode: action.mode,
         selectedKBIds:
           action.mode === "enhanced" && state.selectedKBIds.length === 0
-            ? state.knowledgeBases.filter((kb) => kb.documents.length > 0).map((kb) => kb.id)
+            ? state.knowledgeBases.filter((kb) => kb.docCount > 0).map((kb) => kb.id)
             : state.selectedKBIds,
       }
 
@@ -424,41 +504,28 @@ function reducer(state: AppState, action: Action): AppState {
 
 // ========== Hook ==========
 
-export interface AsyncDispatch {
-  /** 登录后加载会话列表 */
-  loadConversationsOnLogin: () => Promise<void>
-  /** 新建会话（调后端 API） */
-  newConversation: () => void
-  /** 切换会话（加载消息） */
-  switchConversation: (id: string) => void
-  /** 删除会话（调后端 API） */
-  deleteConversation: (id: string) => void
-}
-
 export function useAppState(): {
   state: AppState
   dispatch: Dispatch<Action>
 } {
   const [state, dispatch] = useReducer(reducer, initialState)
 
-  // 登录后首次加载会话列表
+  // 登录后首次加载：会话列表 + 知识库列表
   useEffect(() => {
     if (state.isLoggedIn && state.conversations.length === 0 && !state.conversationsLoading) {
+      // 加载会话
       dispatch({ type: "SET_CONVERSATIONS_LOADING", loading: true })
       fetchConversations()
         .then((summaries) => {
           dispatch({ type: "LOAD_CONVERSATIONS", summaries })
-          // 自动加载第一条会话的消息
           if (summaries.length > 0) {
             loadMessagesForConversation(summaries[0].id, dispatch)
           } else {
-            // 新用户没有会话：自动创建一个默认会话
             apiCreateConversation("新对话")
               .then((summary) => {
                 dispatch({ type: "ADD_REMOTE_CONVERSATION", summary })
               })
               .catch(() => {
-                // 后端创建失败则本地降级
                 const localSummary: ConversationSummary = {
                   id: genId(),
                   title: "新对话",
@@ -472,12 +539,17 @@ export function useAppState(): {
         })
         .catch((err) => {
           dispatch({ type: "SET_CONVERSATIONS_LOADING", loading: false })
-          // 401/403 表示 token 过期或无效，强制退出到登录页
           const msg = err instanceof Error ? err.message : ""
           if (msg.includes("401") || msg.includes("403")) {
             dispatch({ type: "LOGOUT" })
           }
         })
+
+      // 加载知识库
+      dispatch({ type: "SET_KBS_LOADING", loading: true })
+      fetchKnowledgeBases()
+        .then((items) => dispatch({ type: "LOAD_KBS", items }))
+        .catch(() => dispatch({ type: "SET_KBS_LOADING", loading: false }))
     }
   }, [state.isLoggedIn, state.conversations.length, state.conversationsLoading])
 
@@ -490,7 +562,7 @@ export function getKBLabel(state: AppState): { dot: boolean; text: string } {
     const count = state.selectedKBIds.length
     const totalDocs = state.knowledgeBases
       .filter((kb) => state.selectedKBIds.includes(kb.id))
-      .reduce((s, kb) => s + kb.documents.length, 0)
+      .reduce((s, kb) => s + kb.docCount, 0)
     return {
       dot: true,
       text: `${count} 个知识库 · ${totalDocs} 篇文档 · 增强模式`,
@@ -523,7 +595,6 @@ export async function createNewConversation(
     const summary = await apiCreateConversation("新对话")
     dispatch({ type: "ADD_REMOTE_CONVERSATION", summary })
   } catch {
-    // 后端调用失败则本地降级
     const localSummary: ConversationSummary = {
       id: genId(),
       title: "新对话",
@@ -546,4 +617,96 @@ export async function removeConversation(
     // 后端删除失败静默处理，前端先移除
   }
   dispatch({ type: "REMOVE_CONVERSATION", id: conversationId })
+}
+
+// ========== 知识库异步操作 ==========
+
+/** 创建知识库 */
+export async function createKnowledgeBase(
+  name: string,
+  description: string,
+  dispatch: Dispatch<Action>,
+): Promise<void> {
+  try {
+    const item = await apiCreateKB(name, description)
+    dispatch({ type: "ADD_KB_ITEM", item })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "创建失败"
+    dispatch({
+      type: "ADD_TOAST",
+      toast: { id: Date.now().toString(), message: msg, type: "error" },
+    })
+    throw err
+  }
+}
+
+/** 删除知识库 */
+export async function deleteKnowledgeBase(
+  kbId: string,
+  dispatch: Dispatch<Action>,
+): Promise<void> {
+  try {
+    await apiDeleteKB(kbId)
+    dispatch({ type: "REMOVE_KB_ITEM", id: kbId })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "删除失败"
+    dispatch({
+      type: "ADD_TOAST",
+      toast: { id: Date.now().toString(), message: msg, type: "error" },
+    })
+    throw err
+  }
+}
+
+/** 加载知识库下的文档列表 */
+export async function loadDocumentsForKB(
+  kbId: string,
+  dispatch: Dispatch<Action>,
+): Promise<void> {
+  dispatch({ type: "SET_DOCS_LOADING", loading: true })
+  try {
+    const docs = await fetchDocuments(kbId)
+    dispatch({ type: "LOAD_DOCS", kbId, docs })
+  } catch {
+    dispatch({ type: "SET_DOCS_LOADING", loading: false })
+  }
+}
+
+/** 上传文档到知识库 */
+export async function uploadDocumentToKB(
+  kbId: string,
+  file: File,
+  dispatch: Dispatch<Action>,
+): Promise<Document | null> {
+  try {
+    const doc = await apiUploadDocument(kbId, file)
+    dispatch({ type: "ADD_DOC_ITEM", doc })
+    return doc
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "上传失败"
+    dispatch({
+      type: "ADD_TOAST",
+      toast: { id: Date.now().toString(), message: `「${file.name}」${msg}`, type: "error" },
+    })
+    return null
+  }
+}
+
+/** 删除文档 */
+export async function deleteDocumentFromKB(
+  docId: string,
+  kbId: string,
+  dispatch: Dispatch<Action>,
+): Promise<void> {
+  try {
+    await apiDeleteDocument(docId)
+    dispatch({ type: "REMOVE_DOC_ITEM", kbId, docId })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "删除失败"
+    dispatch({
+      type: "ADD_TOAST",
+      toast: { id: Date.now().toString(), message: msg, type: "error" },
+    })
+    throw err
+  }
 }

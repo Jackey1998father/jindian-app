@@ -1,5 +1,6 @@
 import type { KnowledgeBase } from "@/types"
 import { useApp } from "@/components/AppContext"
+import { deleteKnowledgeBase } from "@/hooks/useApp"
 import { cn } from "@/lib/utils"
 
 const ICONS = ["🍽️", "📋", "🧾", "🍳", "🥗", "🍰", "☕", "📊", "🔖", "📖"]
@@ -11,25 +12,18 @@ export function KBCard({ kb, index }: { kb: KnowledgeBase; index: number }) {
     dispatch({ type: "SWITCH_VIEW", view: "kb-detail", kbId: kb.id })
   }
 
-  const handleDelete = (e: React.MouseEvent) => {
+  const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    // Show confirm
-    const id = Date.now().toString()
-    dispatch({
-      type: "ADD_TOAST",
-      toast: {
-        id,
-        message: `确定删除「${kb.name}」吗？该知识库下所有文档也将被永久删除。`,
-        type: "error",
-      },
-    })
-    // We'll use a simpler confirm approach: double-check via browser confirm
-    if (window.confirm(`确定删除知识库「${kb.name}」吗？\n该知识库下所有文档也将被永久删除。`)) {
-      dispatch({ type: "DELETE_KB", id: kb.id })
+    if (!window.confirm(`确定删除知识库「${kb.name}」吗？\n该知识库下所有文档也将被永久删除。`)) return
+
+    try {
+      await deleteKnowledgeBase(kb.id, dispatch)
       dispatch({
         type: "ADD_TOAST",
         toast: { id: Date.now().toString(), message: `知识库「${kb.name}」已删除`, type: "info" },
       })
+    } catch {
+      // 错误已在 deleteKnowledgeBase 中处理
     }
   }
 
@@ -54,7 +48,7 @@ export function KBCard({ kb, index }: { kb: KnowledgeBase; index: number }) {
         <div className="flex items-center justify-between mt-auto">
           <span className="text-xs font-semibold text-wasabi flex items-center gap-1">
             <span className="w-1 h-1 rounded-full bg-sprout" />
-            {kb.documents.length} 篇文档
+            {kb.docCount} 篇文档
           </span>
 
           <button
