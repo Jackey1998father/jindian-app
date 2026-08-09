@@ -3,6 +3,7 @@ import { useApp } from "@/components/AppContext"
 import { DocCard } from "@/components/DocCard"
 import { Modal } from "@/components/Modal"
 import { loadDocumentsForKB, uploadDocumentToKB, deleteDocumentFromKB } from "@/hooks/useApp"
+import { fetchDocumentContent } from "@/services/api"
 import type { DocFileType } from "@/types"
 
 const DOC_ACCEPT = ".pdf,.txt,.ppt,.pptx,.doc,.docx"
@@ -32,6 +33,32 @@ export function KBDetailView() {
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const docsLoadedRef = useRef(false)
+
+  // 文档预览
+  const [previewTitle, setPreviewTitle] = useState("")
+  const [previewContent, setPreviewContent] = useState("")
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
+
+  const handlePreview = async (docId: string, docTitle: string) => {
+    setPreviewTitle(docTitle)
+    setShowPreview(true)
+    setPreviewLoading(true)
+    setPreviewContent("")
+    try {
+      const result = await fetchDocumentContent(docId)
+      setPreviewTitle(result.title || docTitle)
+      if (result.parse_status === 0 || result.parse_status === 1) {
+        setPreviewContent("")
+      } else {
+        setPreviewContent(result.content || "（文档内容为空）")
+      }
+    } catch {
+      setPreviewContent("⚠️ 加载失败，请稍后重试")
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
 
   // 进入详情页时加载文档列表
   useEffect(() => {
@@ -210,11 +237,52 @@ export function KBDetailView() {
             <DocCard
               key={doc.id}
               doc={doc}
+              onClick={() => handlePreview(doc.id, doc.file_name || doc.title)}
               onDelete={() => handleDeleteDoc(doc.id, doc.file_name || doc.title)}
             />
           ))
         )}
       </div>
+
+      {/* Document Preview Modal */}
+      <Modal open={showPreview} onClose={() => setShowPreview(false)}>
+        <div>
+          <h4 className="font-display text-lg font-bold text-ink mb-1 tracking-[0.02em] truncate pr-4">
+            {previewTitle}
+          </h4>
+          <p className="text-[12px] text-ink-muted mb-4">
+            文档内容预览
+          </p>
+
+          <div className="bg-parchment rounded-lg border border-thread p-4 max-h-[60vh] overflow-y-auto custom-scroll">
+            {previewLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <span className="text-sm text-ink-muted">加载中…</span>
+              </div>
+            ) : !previewContent ? (
+              <div className="flex flex-col items-center py-8 text-center">
+                <span className="text-2xl mb-2">📄</span>
+                <span className="text-sm text-ink-muted">
+                  文档尚未解析完成，请等待解析后查看
+                </span>
+              </div>
+            ) : (
+              <pre className="text-[13px] text-ink leading-relaxed whitespace-pre-wrap font-sans">
+                {previewContent}
+              </pre>
+            )}
+          </div>
+
+          <div className="flex justify-end mt-4">
+            <button
+              onClick={() => setShowPreview(false)}
+              className="px-5 py-2 text-[13px] font-semibold text-ink-soft bg-parchment border border-thread rounded-md hover:bg-white transition-colors"
+            >
+              关闭
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Upload Modal */}
       <Modal open={showUpload} onClose={() => setShowUpload(false)}>

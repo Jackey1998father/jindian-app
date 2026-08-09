@@ -471,6 +471,32 @@ export async function apiUploadDocument(
   return result.data
 }
 
+/** 获取单个文档详情（含 content_text 用于预览） */
+export async function fetchDocumentContent(docId: string): Promise<{
+  title: string
+  content: string
+  parse_status: number
+}> {
+  const response = await fetch(getDocumentURL(docId), {
+    headers: authHeaders(),
+  })
+
+  if (!response.ok) {
+    throw new Error(await extractError(response))
+  }
+
+  const result = await response.json()
+  if (result.code !== 0) {
+    throw new Error(result.message || "获取文档失败")
+  }
+
+  return {
+    title: result.data.title || result.data.file_name || "",
+    content: result.data.content_text || "",
+    parse_status: result.data.parse_status ?? 0,
+  }
+}
+
 /** 删除文档 */
 export async function apiDeleteDocument(docId: string): Promise<void> {
   const response = await fetch(getDocumentURL(docId), {

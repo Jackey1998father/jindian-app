@@ -26,15 +26,20 @@ function parseStatusLabel(status: number): string | null {
 export function DocCard({
   doc,
   onDelete,
+  onClick,
 }: {
   doc: Document
   onDelete: () => void
+  onClick?: () => void
 }) {
   const info = FILE_ICONS[doc.file_type] || FILE_ICONS.txt
   const statusLabel = parseStatusLabel(doc.parse_status)
 
   return (
-    <div className="group flex items-center gap-3.5 px-[18px] py-3.5 bg-white border border-thread-light rounded-lg hover:border-sprout transition-colors">
+    <div
+      onClick={onClick}
+      className={`group flex items-center gap-3.5 px-[18px] py-3.5 bg-white border border-thread-light rounded-lg hover:border-sprout transition-colors ${onClick ? "cursor-pointer" : ""}`}
+    >
       {/* 文件类型图标 */}
       <div
         className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg flex-shrink-0 ${info.color}`}
