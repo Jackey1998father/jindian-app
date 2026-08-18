@@ -67,6 +67,17 @@ export default {
           DEFAULT: "#EBE3D8",
           light: "#F3EDE6",
         },
+        // 思考过程（暖琥珀，与熟柿橙同属暖色系）
+        thinking: {
+          DEFAULT: "#D97706",
+          hi: "#B45309",
+          bg: "#FFFBEB",
+          soft: "#FEF3C7",
+          border: "#FCD34D",
+        },
+        // 模态遮罩
+        overlay: "rgba(45,39,32,0.35)",
+        "overlay-hi": "rgba(45,39,32,0.45)",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -104,6 +115,11 @@ export default {
           from: { opacity: "0", transform: "translateY(12px) scale(0.97)" },
           to: { opacity: "1", transform: "translateY(0) scale(1)" },
         },
+        // 页面/视图切换：新页从右侧轻微滑入 + 淡入
+        "view-in": {
+          from: { opacity: "0", transform: "translateX(16px)" },
+          to: { opacity: "1", transform: "translateX(0)" },
+        },
       },
       animation: {
         "msg-in": "msg-in 0.35s cubic-bezier(0.16, 1, 0.3, 1)",
@@ -112,6 +128,7 @@ export default {
         "dot-bounce": "dot-bounce 1.3s ease-in-out infinite",
         "toast-in": "toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
         "sheet-in": "sheet-in 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+        "view-in": "view-in 0.28s cubic-bezier(0.16, 1, 0.3, 1)",
       },
     },
   },

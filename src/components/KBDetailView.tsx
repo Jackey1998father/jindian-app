@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, type DragEvent, type ChangeEvent } from "r
 import { useApp } from "@/components/AppContext"
 import { DocCard } from "@/components/DocCard"
 import { Modal } from "@/components/Modal"
+import { ConfirmDialog } from "@/components/ConfirmDialog"
+import { MarkdownRenderer } from "@/components/MarkdownRenderer"
 import { loadDocumentsForKB, uploadDocumentToKB, deleteDocumentFromKB } from "@/hooks/useApp"
 import { fetchDocumentContent } from "@/services/api"
 import type { DocFileType } from "@/types"
@@ -39,6 +41,9 @@ export function KBDetailView() {
   const [previewContent, setPreviewContent] = useState("")
   const [previewLoading, setPreviewLoading] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
+
+  // 待删除文档（null 表示未在确认删除流程中）
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
 
   const handlePreview = async (docId: string, docTitle: string) => {
     setPreviewTitle(docTitle)
@@ -146,7 +151,7 @@ export function KBDetailView() {
   }
 
   const handleDeleteDoc = async (docId: string, docTitle: string) => {
-    if (!window.confirm(`确定删除文档「${docTitle}」吗？删除后不可恢复。`)) return
+    setDeleteTarget(null)
     try {
       await deleteDocumentFromKB(docId, kb.id, dispatch)
       dispatch({
@@ -166,7 +171,8 @@ export function KBDetailView() {
       <div className="flex items-center gap-2 md:gap-3 px-3 md:px-7 py-3 md:py-3.5 border-b border-thread bg-white flex-shrink-0">
         <button
           onClick={() => dispatch({ type: "SWITCH_VIEW", view: "kb-list" })}
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-ink-soft hover:bg-parchment hover:text-ink transition-colors flex-shrink-0"
+          title="返回知识库列表"
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-ink-soft hover:bg-parchment hover:text-ink active:scale-90 active:bg-thread-light transition-all flex-shrink-0"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
@@ -187,7 +193,7 @@ export function KBDetailView() {
             setUploadTab("doc")
             setShowUpload(true)
           }}
-          className="inline-flex items-center gap-1 md:gap-1.5 px-2.5 md:px-4 py-2 text-[12px] md:text-[13px] font-semibold text-white bg-persimmon rounded-lg hover:bg-persimmon-hi hover:shadow-[0_2px_8px_rgba(224,85,31,0.2)] transition-all whitespace-nowrap"
+          className="inline-flex items-center gap-1 md:gap-1.5 px-2.5 md:px-4 py-2 text-[12px] md:text-[13px] font-semibold text-white bg-persimmon rounded-lg hover:bg-persimmon-hi hover:shadow-[0_2px_8px_rgba(224,85,31,0.2)] active:scale-95 transition-all whitespace-nowrap"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -222,7 +228,7 @@ export function KBDetailView() {
                 setUploadTab("doc")
                 setShowUpload(true)
               }}
-              className="inline-flex items-center gap-1.5 px-4 md:px-5 py-2 md:py-2.5 text-[12px] md:text-[13px] font-semibold text-white bg-persimmon rounded-lg hover:bg-persimmon-hi transition-all"
+              className="inline-flex items-center gap-1.5 px-4 md:px-5 py-2 md:py-2.5 text-[12px] md:text-[13px] font-semibold text-white bg-persimmon rounded-lg hover:bg-persimmon-hi active:scale-95 transition-all"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -238,7 +244,7 @@ export function KBDetailView() {
               key={doc.id}
               doc={doc}
               onClick={() => handlePreview(doc.id, doc.file_name || doc.title)}
-              onDelete={() => handleDeleteDoc(doc.id, doc.file_name || doc.title)}
+              onDelete={() => setDeleteTarget({ id: doc.id, title: doc.file_name || doc.title })}
             />
           ))
         )}
@@ -267,16 +273,16 @@ export function KBDetailView() {
                 </span>
               </div>
             ) : (
-              <pre className="text-[13px] text-ink leading-relaxed whitespace-pre-wrap font-sans">
+              <MarkdownRenderer className="text-[13px] text-ink leading-relaxed">
                 {previewContent}
-              </pre>
+              </MarkdownRenderer>
             )}
           </div>
 
           <div className="flex justify-end mt-4">
             <button
               onClick={() => setShowPreview(false)}
-              className="px-5 py-2 text-[13px] font-semibold text-ink-soft bg-parchment border border-thread rounded-md hover:bg-white transition-colors"
+              className="px-5 py-2 text-[13px] font-semibold text-ink-soft bg-parchment border border-thread rounded-md hover:bg-white active:scale-95 transition-all"
             >
               关闭
             </button>
@@ -301,7 +307,7 @@ export function KBDetailView() {
                 setUploadTab("doc")
                 setSelectedFiles([])
               }}
-              className={`flex-1 py-2 text-[13px] font-semibold rounded-md transition-all ${
+              className={`flex-1 py-2 text-[13px] font-semibold rounded-md transition-all active:scale-[0.97] ${
                 uploadTab === "doc"
                   ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
                   : "text-ink-muted hover:text-ink"
@@ -314,7 +320,7 @@ export function KBDetailView() {
                 setUploadTab("table")
                 setSelectedFiles([])
               }}
-              className={`flex-1 py-2 text-[13px] font-semibold rounded-md transition-all ${
+              className={`flex-1 py-2 text-[13px] font-semibold rounded-md transition-all active:scale-[0.97] ${
                 uploadTab === "table"
                   ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
                   : "text-ink-muted hover:text-ink"
@@ -330,7 +336,7 @@ export function KBDetailView() {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-xl p-6 md:p-8 text-center cursor-pointer transition-all duration-200 ${
+            className={`border-2 border-dashed rounded-xl p-6 md:p-8 text-center cursor-pointer transition-all duration-200 active:scale-[0.99] ${
               dragOver
                 ? "border-persimmon bg-persimmon/5"
                 : "border-thread hover:border-sprout hover:bg-wasabi/3"
@@ -372,7 +378,7 @@ export function KBDetailView() {
                   </span>
                   <button
                     onClick={() => removeFile(idx)}
-                    className="w-5 h-5 rounded flex items-center justify-center text-ink-faint hover:text-red-500 hover:bg-red-50 flex-shrink-0"
+                    className="w-5 h-5 rounded flex items-center justify-center text-ink-faint hover:text-red-500 hover:bg-red-50 active:scale-90 flex-shrink-0"
                   >
                     ×
                   </button>
@@ -388,20 +394,32 @@ export function KBDetailView() {
                 setShowUpload(false)
                 setSelectedFiles([])
               }}
-              className="px-[18px] py-2.5 text-[13px] font-semibold text-ink-soft bg-parchment border border-thread rounded-md hover:bg-white transition-colors"
+              className="px-[18px] py-2.5 text-[13px] font-semibold text-ink-soft bg-parchment border border-thread rounded-md hover:bg-white active:scale-95 transition-all"
             >
               取消
             </button>
             <button
               onClick={handleUpload}
               disabled={selectedFiles.length === 0 || uploading}
-              className="px-[22px] py-2.5 text-[13px] font-semibold text-white bg-persimmon rounded-md hover:bg-persimmon-hi transition-colors disabled:bg-ink-faint disabled:cursor-not-allowed"
+              className="px-[22px] py-2.5 text-[13px] font-semibold text-white bg-persimmon rounded-md hover:bg-persimmon-hi active:scale-95 transition-all disabled:bg-ink-faint disabled:cursor-not-allowed disabled:active:scale-100"
             >
               {uploading ? "上传中…" : `上传 ${selectedFiles.length} 个文件`}
             </button>
           </div>
         </div>
       </Modal>
+
+      {/* 删除文档确认弹窗 */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="删除文档"
+        message={`确定删除文档「${deleteTarget?.title ?? ""}」吗？删除后不可恢复。`}
+        confirmText="删除"
+        onConfirm={() => {
+          if (deleteTarget) handleDeleteDoc(deleteTarget.id, deleteTarget.title)
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </main>
   )
 }

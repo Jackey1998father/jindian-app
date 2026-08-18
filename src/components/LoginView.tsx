@@ -65,7 +65,7 @@ export function LoginView() {
   }
 
   return (
-    <div className="h-screen w-full flex items-center justify-center bg-[#FDF9F5] px-4 overflow-hidden">
+    <div className="h-screen w-full flex items-center justify-center app-bg-animated px-4 overflow-hidden">
       {/* 动态背景光晕 */}
       <div
         className="fixed inset-0 pointer-events-none opacity-25 login-bg-animated"
@@ -143,7 +143,7 @@ export function LoginView() {
               <button
                 type="button"
                 onClick={() => setShowPw(!showPw)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink active:scale-90 transition-all"
                 tabIndex={-1}
               >
                 {showPw ? (

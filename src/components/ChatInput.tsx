@@ -1,5 +1,6 @@
 import { useRef, useCallback, useState, useEffect, type KeyboardEvent } from "react"
 import { useApp } from "@/components/AppContext"
+import { AlertDialog } from "@/components/AlertDialog"
 import { genId } from "@/services/storage"
 import { chatStream, ragChatStream, createConversation } from "@/services/api"
 import type { ChatMessage, ConversationSummary } from "@/types"
@@ -19,6 +20,7 @@ export function ChatInput() {
   const [streamingConvId, setStreamingConvId] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
+  const [kbAlertOpen, setKbAlertOpen] = useState(false)
   const queryRef = useRef(query)
 
   // 同步 ref + 注册模块级 setter，供 WelcomeScreen 快捷标签直接填入
@@ -198,20 +200,26 @@ export function ChatInput() {
   }
 
   const toggleKb = (kbId: string) => {
+    const checked = state.selectedKBIds.includes(kbId)
+    // 增强模式下至少保留一个知识库，取消最后一个时弹窗提示
+    if (checked && state.selectedKBIds.length === 1) {
+      setKbAlertOpen(true)
+      return
+    }
     dispatch({ type: "TOGGLE_KB_SELECTION", kbId })
   }
 
   const sendDisabled = state.isTyping || streamingConvIdsRef.current.has(state.activeConversationId)
 
   return (
-    <div className="px-4 md:px-7 pt-2 md:pt-3 pb-3 md:pb-5 border-t border-thread bg-white flex-shrink-0">
-      <div className="max-w-4xl mx-auto">
+    <div className="px-4 md:px-7 pt-2 md:pt-3 pb-3 md:pb-5 flex-shrink-0">
+      <div className="max-w-4xl mx-auto bg-white rounded-2xl border border-thread shadow-[0_2px_16px_rgba(45,39,32,0.06)] p-2.5 md:p-3">
         {/* 模式切换行 */}
         <div className="flex items-center justify-between mb-2 gap-2">
         <div className="flex items-center gap-1.5 bg-parchment rounded-lg p-0.5">
           <button
             onClick={() => handleModeSwitch("normal")}
-            className={`px-2 md:px-3 py-1 text-[11px] md:text-[12px] font-semibold rounded-md transition-all duration-200 whitespace-nowrap ${
+            className={`px-2 md:px-3 py-1 text-[11px] md:text-[12px] font-semibold rounded-md transition-all duration-200 whitespace-nowrap active:scale-[0.96] ${
               !isEnhanced
                 ? "bg-white text-ink shadow-sm"
                 : "text-ink-muted hover:text-ink"
@@ -222,7 +230,7 @@ export function ChatInput() {
           <div className="relative">
             <button
               onClick={() => handleModeSwitch("enhanced")}
-              className={`px-2 md:px-3 py-1 text-[11px] md:text-[12px] font-semibold rounded-md transition-all duration-200 whitespace-nowrap ${
+              className={`px-2 md:px-3 py-1 text-[11px] md:text-[12px] font-semibold rounded-md transition-all duration-200 whitespace-nowrap active:scale-[0.96] ${
                 isEnhanced
                   ? "bg-sprout text-white shadow-sm"
                   : "text-ink-muted hover:text-ink"
@@ -313,9 +321,9 @@ export function ChatInput() {
           <button
             onClick={() => setThinkingEnabled((v) => !v)}
             title={thinkingEnabled ? "已开启深度思考" : "开启深度思考"}
-            className={`absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 px-1.5 py-1 text-[11px] font-semibold rounded-md transition-all duration-200 whitespace-nowrap border ${
+            className={`absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 px-1.5 py-1 text-[11px] font-semibold rounded-md transition-all duration-200 whitespace-nowrap border active:scale-90 ${
               thinkingEnabled
-                ? "bg-amber-50 text-amber-600 border-amber-300"
+                ? "bg-thinking-bg text-thinking border-thinking"
                 : "text-ink-faint border-transparent hover:text-ink-muted hover:bg-parchment"
             }`}
           >
@@ -340,7 +348,7 @@ export function ChatInput() {
             }
           }}
           disabled={sendDisabled}
-          className="w-11 h-11 md:w-12 md:h-12 rounded-[10px] bg-persimmon text-white flex items-center justify-center flex-shrink-0 transition-all duration-200 disabled:bg-ink-faint disabled:cursor-not-allowed hover:bg-persimmon-hi hover:scale-105 active:scale-95 mb-[3px]"
+          className="w-11 h-11 md:w-12 md:h-12 rounded-[10px] bg-gradient-to-br from-persimmon to-persimmon-hi text-white flex items-center justify-center flex-shrink-0 transition-all duration-200 shadow-[0_2px_8px_rgba(224,85,31,0.28)] disabled:from-ink-faint disabled:to-ink-faint disabled:shadow-none disabled:cursor-not-allowed hover:shadow-[0_4px_14px_rgba(224,85,31,0.35)] hover:scale-105 active:scale-95 mb-[3px]"
         >
           <svg
             width="18"
@@ -358,6 +366,13 @@ export function ChatInput() {
         </button>
       </div>
       </div>
+
+      <AlertDialog
+        open={kbAlertOpen}
+        title="至少保留一个知识库"
+        message="增强模式下必须至少选择一个知识库，无法全部取消勾选。"
+        onConfirm={() => setKbAlertOpen(false)}
+      />
     </div>
   )
 }

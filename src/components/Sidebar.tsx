@@ -1,7 +1,7 @@
+import { useState } from "react"
 import { useApp } from "@/components/AppContext"
 import { cn } from "@/lib/utils"
 import { createNewConversation, loadMessagesForConversation, removeConversation } from "@/hooks/useApp"
-import type { Conversation } from "@/types"
 
 function formatTime(iso: string): string {
   const d = new Date(iso)
@@ -17,6 +17,8 @@ function formatTime(iso: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
+const STORAGE_KEY = "sidebar-collapsed"
+
 export function Sidebar({
   mobileOpen,
   onClose,
@@ -26,6 +28,24 @@ export function Sidebar({
 }) {
   const { state, dispatch } = useApp()
   const conversations = state.conversations
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEY) === "1"
+    } catch {
+      return false
+    }
+  })
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      try {
+        localStorage.setItem(STORAGE_KEY, prev ? "0" : "1")
+      } catch {
+        /* ignore */
+      }
+      return !prev
+    })
+  }
 
   const handleNewConv = async () => {
     await createNewConversation(dispatch)
@@ -66,8 +86,17 @@ export function Sidebar({
     await removeConversation(id, dispatch)
   }
 
-  const content = (
-    <aside className="w-[260px] flex-shrink-0 border-r border-thread bg-[#FBF8F3] flex flex-col h-full">
+  /** 侧边栏主体，isCollapsed 仅桌面端生效（手机抽屉始终展开） */
+  const renderContent = (isCollapsed: boolean) => (
+    <aside
+      className={cn(
+        "flex-shrink-0 border-r border-thread bg-[#FBF8F3] flex flex-col h-full overflow-hidden",
+        "transition-[width] duration-300 ease-in-out",
+        isCollapsed ? "w-0 border-r-0" : "w-[260px]"
+      )}
+    >
+      {/* 内容固定 260px 宽，收起时只被裁剪，不重新排版 */}
+      <div className="w-[260px] flex flex-col h-full">
       {/* 新会话按钮 */}
       <div className="px-4 pt-4 pb-3">
         <button
@@ -95,7 +124,7 @@ export function Sidebar({
                 key={conv.id}
                 onClick={() => handleSwitch(conv.id)}
                 className={cn(
-                  "group flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-150",
+                  "group flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-150 active:scale-[0.98]",
                   conv.id === state.activeConversationId
                     ? "bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)] border border-thread-light"
                     : "hover:bg-white/70 border border-transparent"
@@ -151,25 +180,48 @@ export function Sidebar({
           </div>
         )}
       </div>
+      </div>
     </aside>
   )
 
   return (
     <>
-      {/* 桌面端：正常显示 */}
-      <div className="hidden md:flex h-full">{content}</div>
+      {/* 桌面端：可收起/展开 */}
+      <div className="hidden md:flex h-full relative group/sidebar">
+        {renderContent(collapsed)}
+
+        {/* 中间伸缩把手 */}
+        <button
+          onClick={toggleCollapsed}
+          title={collapsed ? "展开侧边栏" : "收起侧边栏"}
+          className={cn(
+            "absolute top-1/2 -translate-y-1/2 z-10 flex items-center justify-center",
+            "w-5 h-12 bg-white border border-thread rounded-full shadow-[0_2px_8px_rgba(45,39,32,0.1)] text-ink-muted",
+            "hover:text-persimmon hover:border-persimmon hover:shadow-[0_4px_12px_rgba(224,85,31,0.18)] active:scale-90 transition-all duration-200",
+            collapsed ? "left-1" : "right-[-10px]"
+          )}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            {collapsed ? (
+              <polyline points="9 18 15 12 9 6" />
+            ) : (
+              <polyline points="15 18 9 12 15 6" />
+            )}
+          </svg>
+        </button>
+      </div>
 
       {/* 手机端：遮罩 + 抽屉 */}
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-[200]">
           {/* 遮罩 */}
           <div
-            className="absolute inset-0 bg-black/40 animate-fade-in"
+            className="absolute inset-0 bg-overlay-hi animate-fade-in"
             onClick={onClose}
           />
           {/* 抽屉面板 */}
           <div className="absolute left-0 top-0 bottom-0 z-10 animate-slide-in-left">
-            {content}
+            {renderContent(false)}
           </div>
         </div>
       )}

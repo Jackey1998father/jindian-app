@@ -1,13 +1,13 @@
 import type { Document, DocFileType } from "@/types"
 
 const FILE_ICONS: Record<DocFileType, { emoji: string; label: string; color: string }> = {
-  pdf: { emoji: "📕", label: "PDF", color: "bg-red-50 text-red-500" },
-  txt: { emoji: "📄", label: "TXT", color: "bg-gray-100 text-gray-500" },
-  ppt: { emoji: "📊", label: "PPT", color: "bg-orange-50 text-orange-500" },
-  docx: { emoji: "📝", label: "DOCX", color: "bg-blue-50 text-blue-500" },
-  doc: { emoji: "📝", label: "DOC", color: "bg-blue-50 text-blue-500" },
-  csv: { emoji: "📋", label: "CSV", color: "bg-green-50 text-green-600" },
-  xlsx: { emoji: "📈", label: "XLSX", color: "bg-green-50 text-green-600" },
+  pdf: { emoji: "📕", label: "PDF", color: "bg-persimmon-light text-persimmon" },
+  txt: { emoji: "📄", label: "TXT", color: "bg-parchment text-ink-soft" },
+  ppt: { emoji: "📊", label: "PPT", color: "bg-parchment text-ink-soft" },
+  docx: { emoji: "📝", label: "DOCX", color: "bg-persimmon-light text-persimmon" },
+  doc: { emoji: "📝", label: "DOC", color: "bg-persimmon-light text-persimmon" },
+  csv: { emoji: "📋", label: "CSV", color: "bg-wasabi-light text-wasabi" },
+  xlsx: { emoji: "📈", label: "XLSX", color: "bg-wasabi-light text-wasabi" },
 }
 
 function formatSize(bytes: number): string {
@@ -38,11 +38,11 @@ export function DocCard({
   return (
     <div
       onClick={onClick}
-      className={`group flex items-center gap-3.5 px-[18px] py-3.5 bg-white border border-thread-light rounded-lg hover:border-sprout transition-colors ${onClick ? "cursor-pointer" : ""}`}
+      className={`group flex items-center gap-3.5 px-[18px] py-3.5 bg-white border border-thread-light rounded-xl transition-all duration-200 hover:border-sprout hover:shadow-[0_8px_24px_rgba(45,39,32,0.06)] hover:-translate-y-0.5 active:scale-[0.985] ${onClick ? "cursor-pointer" : ""}`}
     >
       {/* 文件类型图标 */}
       <div
-        className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg flex-shrink-0 ${info.color}`}
+        className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0 ring-1 ring-inset ring-white/50 ${info.color}`}
         title={info.label}
       >
         {info.emoji}
@@ -50,7 +50,7 @@ export function DocCard({
 
       {/* 文档信息 */}
       <div className="flex-1 min-w-0">
-        <h4 className="text-sm font-semibold text-ink truncate">
+        <h4 className="text-sm font-semibold text-ink truncate group-hover:text-persimmon transition-colors">
           {doc.file_name || doc.title}
         </h4>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -72,12 +72,16 @@ export function DocCard({
             </>
           )}
           {statusLabel && (
-            <>
-              <span className="text-[11px] text-ink-faint">·</span>
-              <span className={`text-[11px] font-medium ${doc.parse_status === 3 ? "text-red-500" : "text-amber-500"}`}>
-                {statusLabel}
-              </span>
-            </>
+            <span
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                doc.parse_status === 3
+                  ? "bg-persimmon-light text-persimmon"
+                  : "bg-thinking-bg text-thinking"
+              }`}
+            >
+              <span className={`w-1 h-1 rounded-full ${doc.parse_status === 3 ? "bg-persimmon" : "bg-thinking"}`} />
+              {statusLabel}
+            </span>
           )}
         </div>
       </div>
@@ -85,7 +89,7 @@ export function DocCard({
       {/* 删除按钮 */}
       <button
         onClick={onDelete}
-        className="w-[32px] h-[32px] rounded-md flex items-center justify-center text-ink-muted hover:bg-red-50 hover:text-red-500 transition-all duration-150 flex-shrink-0"
+        className="w-[32px] h-[32px] rounded-md flex items-center justify-center text-ink-faint hover:bg-red-50 hover:text-red-500 active:scale-90 transition-all duration-150 flex-shrink-0"
         title="删除文档"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

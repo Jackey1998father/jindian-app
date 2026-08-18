@@ -6,12 +6,14 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const isInManage = state.view !== "chat"
 
   return (
-    <header className="h-14 flex items-center justify-between px-4 md:px-5 flex-shrink-0 bg-white border-b border-thread z-[100]">
+    <header className="relative h-14 flex items-center justify-between px-4 md:px-5 flex-shrink-0 bg-white border-b border-thread z-[100]">
+      {/* 底部品牌渐变细线 */}
+      <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-gradient-to-r from-persimmon to-sprout pointer-events-none" />
       <div className="flex items-center gap-2 md:gap-2.5">
         {/* 汉堡菜单 - 仅手机端 */}
         <button
           onClick={onMenuClick}
-          className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg text-ink-soft hover:bg-parchment hover:text-ink transition-colors flex-shrink-0 -ml-1"
+          className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg text-ink-soft hover:bg-parchment hover:text-ink active:scale-90 transition-all flex-shrink-0 -ml-1"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <line x1="3" y1="6" x2="21" y2="6" />
@@ -47,10 +49,10 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             dispatch({ type: "SWITCH_VIEW", view: isInManage ? "chat" : "kb-list" })
           }
           className={cn(
-            "inline-flex items-center gap-1.5 px-2.5 md:px-4 py-1.5 text-[12px] md:text-[13px] font-semibold rounded-md border transition-colors duration-200 whitespace-nowrap",
+            "inline-flex items-center gap-1.5 px-2.5 md:px-4 py-1.5 text-[12px] md:text-[13px] font-semibold rounded-md border transition-all duration-200 whitespace-nowrap active:scale-95",
             isInManage
-              ? "bg-persimmon text-white border-persimmon"
-              : "text-ink-soft border-transparent hover:bg-parchment hover:text-ink"
+              ? "bg-persimmon text-white border-persimmon active:bg-persimmon-hi"
+              : "text-ink-soft border-transparent hover:bg-parchment hover:text-ink active:bg-thread-light"
           )}
         >
           {isInManage ? (
@@ -71,7 +73,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         {/* 退出登录 */}
         <button
           onClick={() => dispatch({ type: "LOGOUT" })}
-          className="inline-flex items-center gap-1 px-2 md:px-3 py-1.5 text-[12px] font-medium text-ink-muted hover:text-red-500 hover:bg-red-50 rounded-md transition-colors duration-200"
+          className="inline-flex items-center gap-1 px-2 md:px-3 py-1.5 text-[12px] font-medium text-ink-muted hover:text-red-500 hover:bg-red-50 rounded-md active:scale-95 transition-all duration-200"
           title="退出登录"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

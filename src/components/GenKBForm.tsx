@@ -53,13 +53,13 @@ export function GenKBForm({
       <div className="flex gap-2.5 justify-end mt-2">
         <button
           onClick={onCancel}
-          className="px-[18px] py-2.5 text-[13px] font-semibold text-ink-soft bg-parchment border border-thread rounded-md hover:bg-white transition-colors"
+          className="px-[18px] py-2.5 text-[13px] font-semibold text-ink-soft bg-parchment border border-thread rounded-md hover:bg-white active:scale-95 transition-all"
         >
           取消
         </button>
         <button
           onClick={handleSubmit}
-          className="px-[22px] py-2.5 text-[13px] font-semibold text-white bg-persimmon rounded-md hover:bg-persimmon-hi transition-colors"
+          className="px-[22px] py-2.5 text-[13px] font-semibold text-white bg-persimmon rounded-md hover:bg-persimmon-hi active:scale-95 transition-all"
         >
           创建
         </button>

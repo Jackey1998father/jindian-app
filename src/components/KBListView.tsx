@@ -32,7 +32,7 @@ export function KBListView() {
           </h2>
           <button
             onClick={() => setShowForm(true)}
-            className="inline-flex items-center gap-1.5 px-3 md:px-5 py-2 md:py-2.5 text-[12px] md:text-[13px] font-semibold text-white bg-persimmon rounded-lg hover:bg-persimmon-hi hover:-translate-y-px active:translate-y-0 transition-all duration-200 whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 px-3 md:px-5 py-2 md:py-2.5 text-[12px] md:text-[13px] font-semibold text-white bg-persimmon rounded-lg hover:bg-persimmon-hi hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all duration-200 whitespace-nowrap"
           >
             <span>+</span> 新建知识库
           </button>
@@ -59,7 +59,7 @@ export function KBListView() {
             </p>
             <button
               onClick={() => setShowForm(true)}
-              className="inline-flex items-center gap-1.5 px-4 md:px-5 py-2 md:py-2.5 text-[12px] md:text-[13px] font-semibold text-white bg-persimmon rounded-lg hover:bg-persimmon-hi transition-all"
+              className="inline-flex items-center gap-1.5 px-4 md:px-5 py-2 md:py-2.5 text-[12px] md:text-[13px] font-semibold text-white bg-persimmon rounded-lg hover:bg-persimmon-hi active:scale-95 transition-all"
             >
               + 新建知识库
             </button>

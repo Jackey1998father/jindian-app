@@ -5,6 +5,9 @@
 @layer base {
   :root {
     /* 锦点 · 熟柿橙 & 山葵绿 主题 */
+    /* 供原生 CSS 层引用的主题色（与 tailwind.config 的 token 保持一致） */
+    --color-rice-broth: #FDF9F5;
+    --color-thread: #EBE3D8;
     --background: 31 33% 97%;
     --foreground: 30 14% 14%;
     --card: 40 35% 99%;
@@ -33,7 +36,11 @@
     @apply border-border;
   }
   body {
-    @apply bg-[#FDF9F5] text-foreground;
+    @apply text-foreground;
+    /* 淡紫 → 卡其 → 淡蓝 的柔和渐变，缓慢流动 */
+    background: linear-gradient(120deg, #E6DFF1 0%, #F2EBE1 22%, #FFFDFB 50%, #DFE8F4 78%, #D5DFEF 100%);
+    background-size: 220% 220%;
+    animation: app-bg-drift 24s ease-in-out infinite;
     font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -45,10 +52,12 @@
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    opacity: 0.3;
+    opacity: 0.5;
     background-image:
-      radial-gradient(circle at 20% 80%, rgba(224,85,31,0.03) 0%, transparent 50%),
-      radial-gradient(circle at 80% 20%, rgba(74,107,64,0.03) 0%, transparent 50%);
+      radial-gradient(circle at 18% 82%, rgba(158,124,205,0.12) 0%, transparent 52%),
+      radial-gradient(circle at 82% 18%, rgba(108,148,215,0.12) 0%, transparent 52%);
+    background-size: 60% 60%, 50% 50%;
+    animation: app-bg-drift 20s ease-in-out infinite;
   }
 }
 
@@ -59,7 +68,7 @@
   background: transparent;
 }
 .custom-scroll::-webkit-scrollbar-thumb {
-  background: #EBE3D8;
+  background: var(--color-thread);
   border-radius: 4px;
 }
 
@@ -117,6 +126,29 @@
   to   { opacity: 1; }
 }
 
+/* 全应用背景：渐变/光晕缓慢流动 */
+@keyframes app-bg-drift {
+  0%   { background-position: 0% 0%; }
+  50%  { background-position: 100% 100%; }
+  100% { background-position: 0% 0%; }
+}
+
+/* ===== 弹窗遮罩/面板动画 ===== */
+@keyframes backdropIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes backdropOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes sheetOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(10px) scale(0.97); }
+}
+
 /* 成功勾的描边动画 */
 @keyframes login-check-draw {
   from { stroke-dashoffset: 24; }
@@ -143,4 +175,11 @@
 .login-bg-animated {
   background-size: 60% 60%, 50% 50%;
   animation: login-bg-drift 20s ease-in-out infinite;
+}
+
+/* 主内容区背景：淡紫 → 卡其 → 淡蓝，缓慢流动 */
+.app-bg-animated {
+  background: linear-gradient(120deg, #E6DFF1 0%, #F2EBE1 22%, #FFFDFB 50%, #DFE8F4 78%, #D5DFEF 100%);
+  background-size: 220% 220%;
+  animation: app-bg-drift 24s ease-in-out infinite;
 }

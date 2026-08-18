@@ -484,8 +484,9 @@ function reducer(state: AppState, action: Action): AppState {
       const newIds = exists
         ? state.selectedKBIds.filter((id) => id !== action.kbId)
         : [...state.selectedKBIds, action.kbId]
+      // 增强模式下至少保留一个知识库，不允许全部取消勾选
       if (newIds.length === 0) {
-        return { ...state, selectedKBIds: newIds, chatMode: "normal" }
+        return state
       }
       return { ...state, selectedKBIds: newIds }
     }
