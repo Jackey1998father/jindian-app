@@ -212,7 +212,7 @@ export function ChatInput() {
   const sendDisabled = state.isTyping || streamingConvIdsRef.current.has(state.activeConversationId)
 
   return (
-    <div className="px-4 md:px-7 pt-2 md:pt-3 pb-3 md:pb-5 flex-shrink-0">
+    <div className="px-4 md:px-7 pt-2 md:pt-3 pb-[max(12px,env(safe-area-inset-bottom))] md:pb-[max(20px,env(safe-area-inset-bottom))] flex-shrink-0">
       <div className="max-w-4xl mx-auto bg-white rounded-2xl border border-thread shadow-[0_2px_16px_rgba(45,39,32,0.06)] p-2.5 md:p-3">
         {/* 模式切换行 */}
         <div className="flex items-center justify-between mb-2 gap-2">
