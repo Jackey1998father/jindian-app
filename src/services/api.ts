@@ -5,6 +5,7 @@ import type {
   ApiMessageItem,
   KnowledgeBaseSummary,
   Document,
+  ModelOption,
 } from "@/types"
 import {
   getChatURL,
@@ -17,6 +18,7 @@ import {
   getKnowledgeBaseURL,
   getDocumentsURL,
   getDocumentURL,
+  getModelsURL,
 } from "@/config"
 import { loadToken } from "@/services/storage"
 
@@ -161,6 +163,26 @@ export async function fetchMessages(
   return result.data || []
 }
 
+// ========== 模型管理 ==========
+
+/** 获取可用模型列表（默认 chat 类型，来自 tj_models 表） */
+export async function fetchModels(modelType = "chat"): Promise<ModelOption[]> {
+  const response = await fetch(`${getModelsURL()}?model_type=${encodeURIComponent(modelType)}`, {
+    headers: authHeaders(),
+  })
+
+  if (!response.ok) {
+    throw new Error(await extractError(response))
+  }
+
+  const result = await response.json()
+  if (result.code !== 0) {
+    throw new Error(result.message || "获取模型列表失败")
+  }
+
+  return result.data || []
+}
+
 // ========== 聊天（流式）==========
 
 /** 将后端 ApiMessageItem[] 转为前端 ChatMessage[] */
@@ -169,6 +191,7 @@ export function toChatMessages(items: ApiMessageItem[]): ChatMessage[] {
     id: m.id,
     role: m.role === "assistant" ? "ai" : ("user" as const),
     text: m.content,
+    reasoning: m.reasoning || undefined,
     hasSource: false,
     sources: null,
     time: m.created_at,
@@ -182,6 +205,8 @@ export function toChatMessages(items: ApiMessageItem[]): ChatMessage[] {
  * @param message 用户当前消息文本
  * @param onChunk 每收到一个文本块时回调
  * @param signal 可选 AbortSignal，用于取消请求
+ * @param thinking 是否开启深度思考
+ * @param model 用户选择的模型 ID（空则后端用 tj_models 默认模型）
  * @returns 完整响应文本
  */
 export async function chatStream(
@@ -190,6 +215,8 @@ export async function chatStream(
   onChunk: (chunk: { content?: string; reasoning?: string }) => void,
   signal?: AbortSignal,
   thinking?: boolean,
+  model?: string,
+  images?: string[],
 ): Promise<string> {
   const response = await fetch(getChatURL(), {
     method: "POST",
@@ -197,7 +224,9 @@ export async function chatStream(
     body: JSON.stringify({
       conversation_id: conversationId,
       message,
+      ...(images && images.length > 0 ? { images } : {}),
       ...(thinking ? { thinking: true } : {}),
+      ...(model ? { model } : {}),
     }),
     signal,
   })
@@ -276,6 +305,8 @@ export async function chatStream(
  * @param kbIds 选中的知识库 ID 列表
  * @param onChunk 每收到一个文本块时回调
  * @param signal 可选 AbortSignal，用于取消请求
+ * @param thinking 是否开启深度思考
+ * @param model 用户选择的模型 ID（空则后端用 tj_models 默认模型）
  * @returns 完整响应文本
  */
 export async function ragChatStream(
@@ -285,6 +316,8 @@ export async function ragChatStream(
   onChunk: (chunk: { content?: string; reasoning?: string }) => void,
   signal?: AbortSignal,
   thinking?: boolean,
+  model?: string,
+  images?: string[],
 ): Promise<string> {
   const response = await fetch(getRagChatURL(), {
     method: "POST",
@@ -294,7 +327,9 @@ export async function ragChatStream(
       message,
       kb_ids: kbIds,
       use_rag: true,
+      ...(images && images.length > 0 ? { images } : {}),
       ...(thinking ? { thinking: true } : {}),
+      ...(model ? { model } : {}),
     }),
     signal,
   })

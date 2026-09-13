@@ -15,6 +15,8 @@ export const API_CONFIG = {
   messagesPath: "/api/v1/messages",
   /** 知识库 */
   knowledgeBasesPath: "/api/v1/knowledge-bases",
+  /** 可选模型列表 */
+  modelsPath: "/api/v1/models",
   /** 系统提示词（后端决定是否使用） */
   systemPrompt: "你是锦点餐饮公司的智能回答助手",
   /** 流式请求 */
@@ -43,6 +45,11 @@ export function getRagChatURL(): string {
 /** 获取会话列表/创建 API URL */
 export function getConversationsURL(): string {
   return api(API_CONFIG.conversationsPath)
+}
+
+/** 获取可选模型列表 API URL */
+export function getModelsURL(): string {
+  return api(API_CONFIG.modelsPath)
 }
 
 /** 获取指定会话的操作 URL */

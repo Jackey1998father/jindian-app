@@ -12,15 +12,59 @@ export function requestFill(query: string) {
   _setInputQuery?.(query)
 }
 
+/** 读取文件为 data URL */
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(new Error("读取图片失败"))
+    reader.readAsDataURL(file)
+  })
+}
+
+/** 图片长边超过 maxDim 时用 canvas 压缩，减少 base64 体积（手机照片动辄几 MB） */
+function downscaleDataURL(dataUrl: string, maxDim = 2048): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const w = img.naturalWidth
+      const h = img.naturalHeight
+      if (w <= maxDim && h <= maxDim) {
+        resolve(dataUrl)
+        return
+      }
+      const scale = Math.min(maxDim / w, maxDim / h)
+      const cw = Math.max(1, Math.round(w * scale))
+      const ch = Math.max(1, Math.round(h * scale))
+      const canvas = document.createElement("canvas")
+      canvas.width = cw
+      canvas.height = ch
+      const ctx = canvas.getContext("2d")
+      if (!ctx) {
+        resolve(dataUrl)
+        return
+      }
+      ctx.drawImage(img, 0, 0, cw, ch)
+      resolve(canvas.toDataURL("image/jpeg", 0.85))
+    }
+    img.onerror = () => resolve(dataUrl)
+    img.src = dataUrl
+  })
+}
+
 export function ChatInput() {
   const { state, dispatch } = useApp()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const kbPopRef = useRef<HTMLDivElement>(null)
+  const modelPopRef = useRef<HTMLDivElement>(null)
   const [kbOpen, setKbOpen] = useState(false)
+  const [modelOpen, setModelOpen] = useState(false)
   const [streamingConvId, setStreamingConvId] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
   const [kbAlertOpen, setKbAlertOpen] = useState(false)
+  const [images, setImages] = useState<string[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const queryRef = useRef(query)
 
   // 同步 ref + 注册模块级 setter，供 WelcomeScreen 快捷标签直接填入
@@ -53,25 +97,34 @@ export function ChatInput() {
     }
   }, [])
 
-  // 点击外部关闭 KB 选择弹窗
+  // 点击外部关闭 KB 选择弹窗 / 模型选择弹窗
   useEffect(() => {
-    if (!kbOpen) return
+    if (!kbOpen && !modelOpen) return
     const handler = (e: MouseEvent) => {
-      if (kbPopRef.current && !kbPopRef.current.contains(e.target as Node)) {
+      if (kbOpen && kbPopRef.current && !kbPopRef.current.contains(e.target as Node)) {
         setKbOpen(false)
+      }
+      if (modelOpen && modelPopRef.current && !modelPopRef.current.contains(e.target as Node)) {
+        setModelOpen(false)
       }
     }
     document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
-  }, [kbOpen])
+  }, [kbOpen, modelOpen])
 
   const activeKBs = isEnhanced
     ? state.knowledgeBases.filter(kb => state.selectedKBIds.includes(kb.id) && kb.docCount > 0)
     : []
 
+  // 当前选中的模型（用于显示名称）
+  const selectedModel = state.models.find(m => m.model_id === state.selectedModelId)
+
   const doSend = useCallback(
-    async (query: string) => {
-      if (!query || state.isTyping) return
+    async (query: string, imgs: string[]) => {
+      if ((!query.trim() && imgs.length === 0) || state.isTyping) return
+
+      // 图片随本条消息发出后清空（文字由调用方负责清空）
+      setImages([])
 
       // 决定是否走 RAG 增强（需同时满足：增强模式 + 已选知识库）
       const useRag = isEnhanced && state.selectedKBIds.length > 0
@@ -104,6 +157,7 @@ export function ChatInput() {
         hasSource: false,
         sources: null,
         time: new Date().toISOString(),
+        ...(imgs.length > 0 ? { images: imgs } : {}),
       }
       dispatch({ type: "ADD_MESSAGE", message: userMsg })
 
@@ -155,10 +209,10 @@ export function ChatInput() {
 
         if (useRag) {
           // ===== 增强模式：RAG 流式 API =====
-          await ragChatStream(convId, query, state.selectedKBIds, handleChunk, ac.signal, thinkingEnabled)
+          await ragChatStream(convId, query, state.selectedKBIds, handleChunk, ac.signal, thinkingEnabled, state.selectedModelId || undefined, imgs)
         } else {
           // ===== 普通模式：流式 API =====
-          await chatStream(convId, query, handleChunk, ac.signal, thinkingEnabled)
+          await chatStream(convId, query, handleChunk, ac.signal, thinkingEnabled, state.selectedModelId || undefined, imgs)
         }
       } catch (err) {
         // AbortError 是正常取消，不展示错误
@@ -178,16 +232,16 @@ export function ChatInput() {
         setTimeout(() => textareaRef.current?.focus(), 50)
       }
     },
-    [state.isTyping, state.activeConversationId, isEnhanced, state.selectedKBIds, thinkingEnabled, dispatch]
+    [state.isTyping, state.activeConversationId, isEnhanced, state.selectedKBIds, state.selectedModelId, thinkingEnabled, dispatch]
   )
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       const q = query.trim()
-      if (q) {
+      if (q || images.length > 0) {
         setQuery("")
-        void doSend(q)
+        void doSend(q, images)
       }
     }
   }
@@ -208,6 +262,26 @@ export function ChatInput() {
     }
     dispatch({ type: "TOGGLE_KB_SELECTION", kbId })
   }
+
+  // 选择图片 → 读成 data URL（大图压缩）→ 追加到待发送列表（最多 4 张）
+  const handlePickImages = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    const MAX_IMAGES = 4
+    const picked = Array.from(files).filter((f) => f.type.startsWith("image/"))
+    if (picked.length === 0) return
+
+    const urls: string[] = []
+    for (const f of picked) {
+      try {
+        const raw = await readFileAsDataURL(f)
+        urls.push(await downscaleDataURL(raw))
+      } catch {
+        // 读取失败跳过该张
+      }
+    }
+    if (urls.length === 0) return
+    setImages((prev) => [...prev, ...urls].slice(0, MAX_IMAGES))
+  }, [])
 
   const sendDisabled = state.isTyping || streamingConvIdsRef.current.has(state.activeConversationId)
 
@@ -291,22 +365,179 @@ export function ChatInput() {
           </div>
         </div>
 
-        {/* 右侧状态指示 - 手机端隐藏 */}
-        <div className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-semibold text-ink-muted tracking-[0.02em]">
-          <span
-            className={`w-1.5 h-1.5 rounded-full transition-colors ${
-              isEnhanced && activeKBs.length > 0 ? "bg-sprout" : "bg-ink-faint"
-            }`}
-          />
-          {isEnhanced
-            ? `${activeKBs.length} 个知识库 · 增强模式`
-            : "通用模式"}
+        {/* 右侧：模型选择器 + 状态指示（状态指示手机端隐藏） */}
+        <div className="flex items-center gap-2 min-w-0">
+          {/* 模型选择器 */}
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={() => setModelOpen((v) => !v)}
+              title="选择对话模型"
+              disabled={state.models.length === 0}
+              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] md:text-[12px] font-semibold text-ink-muted rounded-lg border border-transparent transition-all duration-200 hover:bg-parchment hover:text-ink active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="flex-shrink-0 text-persimmon"
+              >
+                <rect x="4" y="4" width="16" height="16" rx="2" />
+                <rect x="9" y="9" width="6" height="6" />
+                <line x1="9" y1="1" x2="9" y2="4" />
+                <line x1="15" y1="1" x2="15" y2="4" />
+                <line x1="9" y1="20" x2="9" y2="23" />
+                <line x1="15" y1="20" x2="15" y2="23" />
+                <line x1="20" y1="9" x2="23" y2="9" />
+                <line x1="20" y1="14" x2="23" y2="14" />
+                <line x1="1" y1="9" x2="4" y2="9" />
+                <line x1="1" y1="14" x2="4" y2="14" />
+              </svg>
+              <span className="max-w-[90px] md:max-w-[130px] truncate">
+                {selectedModel?.name || "默认模型"}
+              </span>
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={`flex-shrink-0 transition-transform duration-200 ${modelOpen ? "rotate-180" : ""}`}
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+
+            {/* 向上弹出的模型选择列表 */}
+            {modelOpen && state.models.length > 0 && (
+              <div
+                ref={modelPopRef}
+                className="absolute bottom-full right-0 mb-2 w-60 md:w-72 bg-white rounded-xl shadow-lg border border-thread z-50 overflow-hidden animate-fade-in"
+              >
+                <div className="px-3 py-2 border-b border-thread bg-parchment">
+                  <span className="text-[11px] font-semibold text-ink-muted tracking-wide">
+                    选择对话模型
+                  </span>
+                </div>
+                <div className="overflow-y-auto py-1 custom-scroll" style={{ maxHeight: "220px" }}>
+                  {state.models.map((m) => {
+                    const active = m.model_id === state.selectedModelId
+                    return (
+                      <button
+                        key={m.model_id}
+                        onClick={() => {
+                          dispatch({ type: "SET_SELECTED_MODEL", modelId: m.model_id })
+                          setModelOpen(false)
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
+                          active ? "bg-persimmon-light/60" : "hover:bg-parchment"
+                        }`}
+                      >
+                        <span
+                          className={`w-3.5 h-3.5 rounded-full border flex-shrink-0 flex items-center justify-center ${
+                            active ? "border-persimmon bg-persimmon" : "border-thread"
+                          }`}
+                        >
+                          {active && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-[12px] font-medium text-ink truncate">
+                            {m.name}
+                            {m.is_default && (
+                              <span className="ml-1 text-[10px] text-persimmon font-semibold">默认</span>
+                            )}
+                          </span>
+                          {m.description && (
+                            <span className="block text-[10px] text-ink-faint truncate">{m.description}</span>
+                          )}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 状态指示 - 手机端隐藏 */}
+          <div className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-semibold text-ink-muted tracking-[0.02em] flex-shrink-0">
+            <span
+              className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                isEnhanced && activeKBs.length > 0 ? "bg-sprout" : "bg-ink-faint"
+              }`}
+            />
+            {isEnhanced
+              ? `${activeKBs.length} 个知识库 · 增强模式`
+              : "通用模式"}
+          </div>
         </div>
       </div>
+
+      {/* 待发送图片预览 */}
+      {images.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {images.map((url, i) => (
+            <div
+              key={i}
+              className="relative w-14 h-14 rounded-lg overflow-hidden border border-thread bg-parchment"
+            >
+              <img src={url} alt={`图片 ${i + 1}`} className="w-full h-full object-cover" />
+              <button
+                type="button"
+                onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
+                title="移除图片"
+                className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/50 text-white text-[12px] leading-none flex items-center justify-center hover:bg-black/70 transition-colors"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 输入框 */}
       <div className="flex gap-2 md:gap-2.5 items-center">
         <div className="flex-1 relative">
+          {/* 图片上传“+”按钮 — 嵌入输入框内左侧 */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            title="上传图片"
+            disabled={state.isTyping}
+            className="absolute left-2 inset-y-0 my-auto w-7 h-7 rounded-lg text-ink-muted hover:text-persimmon hover:bg-parchment transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              void handlePickImages(e.target.files)
+              e.target.value = ""
+            }}
+          />
           <textarea
             ref={textareaRef}
             value={query}
@@ -314,14 +545,14 @@ export function ChatInput() {
             onKeyDown={handleKeyDown}
             placeholder={isEnhanced && activeKBs.length > 0 ? "搜索知识库中的内容…" : "输入您的问题…"}
             rows={1}
-            className="w-full min-h-12 max-h-[140px] px-3 md:pl-4 md:pr-20 py-3 text-sm leading-relaxed text-ink bg-parchment rounded-[10px] border border-thread resize-none transition-all duration-200 placeholder:text-ink-faint focus:border-persimmon focus:bg-white focus:shadow-[0_0_0_3px_rgba(224,85,31,0.08),inset_0_1px_0_#F3EDE6] outline-none"
+            className="w-full min-h-12 max-h-[140px] pl-9 pr-3 md:pl-10 md:pr-20 py-3 text-sm leading-relaxed text-ink bg-parchment rounded-[10px] border border-thread resize-none transition-all duration-200 placeholder:text-ink-faint focus:border-persimmon focus:bg-white focus:shadow-[0_0_0_3px_rgba(224,85,31,0.08),inset_0_1px_0_#F3EDE6] outline-none"
           />
 
           {/* 思考开关 — 嵌入输入框内右侧 */}
           <button
             onClick={() => setThinkingEnabled((v) => !v)}
             title={thinkingEnabled ? "已开启深度思考" : "开启深度思考"}
-            className={`absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 px-1.5 py-1 text-[11px] font-semibold rounded-md transition-all duration-200 whitespace-nowrap border active:scale-90 ${
+            className={`absolute right-2 inset-y-0 my-auto h-7 inline-flex items-center gap-1 px-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 whitespace-nowrap border active:scale-90 ${
               thinkingEnabled
                 ? "bg-thinking-bg text-thinking border-thinking"
                 : "text-ink-faint border-transparent hover:text-ink-muted hover:bg-parchment"
@@ -342,9 +573,9 @@ export function ChatInput() {
         <button
           onClick={() => {
             const q = query.trim()
-            if (q) {
+            if (q || images.length > 0) {
               setQuery("")
-              void doSend(q)
+              void doSend(q, images)
             }
           }}
           disabled={sendDisabled}

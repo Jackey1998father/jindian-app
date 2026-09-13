@@ -9,17 +9,31 @@ export function ChatView() {
   const { state } = useApp()
   const scrollRef = useRef<HTMLDivElement>(null)
   const shouldAutoScroll = useRef(true)
+  const prevMsgCount = useRef(0)
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = 0
       shouldAutoScroll.current = true
     }
+    prevMsgCount.current = state.messages.length
   }, [state.activeConversationId])
 
   useEffect(() => {
+    const currentCount = state.messages.length
+    // 消息数量增加 = 发送了新消息，强制滚动到底部
+    const isNewMessage = currentCount > prevMsgCount.current
+    if (isNewMessage) {
+      shouldAutoScroll.current = true
+    }
+    prevMsgCount.current = currentCount
+
     if (shouldAutoScroll.current && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      // 新消息用平滑滚动，流式追加用瞬时滚动
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: isNewMessage ? "smooth" : "auto",
+      })
     }
   }, [state.messages, state.isTyping])
 

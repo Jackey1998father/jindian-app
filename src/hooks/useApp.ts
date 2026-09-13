@@ -11,6 +11,7 @@ import type {
   DocFileType,
   User,
   ChatMode,
+  ModelOption,
 } from "@/types"
 import {
   genId,
@@ -29,6 +30,7 @@ import {
   fetchDocuments,
   apiUploadDocument,
   apiDeleteDocument,
+  fetchModels,
 } from "@/services/api"
 
 // ========== State ==========
@@ -58,6 +60,10 @@ export interface AppState {
   loginError: string | null
   chatMode: ChatMode
   selectedKBIds: string[]
+  /** 可选模型列表（来自 tj_models 表） */
+  models: ModelOption[]
+  /** 当前选中的对话模型 ID（空串 = 后端默认） */
+  selectedModelId: string
 }
 
 // ========== Actions ==========
@@ -98,6 +104,9 @@ export type Action =
   // 聊天模式
   | { type: "SET_CHAT_MODE"; mode: ChatMode }
   | { type: "TOGGLE_KB_SELECTION"; kbId: string }
+  // 模型选择
+  | { type: "LOAD_MODELS"; items: ModelOption[] }
+  | { type: "SET_SELECTED_MODEL"; modelId: string }
   // 提示
   | { type: "ADD_TOAST"; toast: ToastItem }
   | { type: "REMOVE_TOAST"; id: string }
@@ -146,6 +155,8 @@ const initialState: AppState = {
   loginError: null,
   chatMode: "normal",
   selectedKBIds: [],
+  models: [],
+  selectedModelId: "",
 }
 
 // ========== Reducer ==========
@@ -491,6 +502,20 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, selectedKBIds: newIds }
     }
 
+    // ---------- 模型选择 ----------
+    case "LOAD_MODELS": {
+      // 默认选中 is_default 的模型，否则第一个
+      const def = action.items.find((m) => m.is_default) ?? action.items[0]
+      return {
+        ...state,
+        models: action.items,
+        selectedModelId: state.selectedModelId || def?.model_id || "",
+      }
+    }
+
+    case "SET_SELECTED_MODEL":
+      return { ...state, selectedModelId: action.modelId }
+
     // ---------- 提示 ----------
     case "ADD_TOAST":
       return { ...state, toasts: [...state.toasts, action.toast] }
@@ -551,6 +576,11 @@ export function useAppState(): {
       fetchKnowledgeBases()
         .then((items) => dispatch({ type: "LOAD_KBS", items }))
         .catch(() => dispatch({ type: "SET_KBS_LOADING", loading: false }))
+
+      // 加载可选模型列表（chat 类型）
+      fetchModels("chat")
+        .then((items) => dispatch({ type: "LOAD_MODELS", items }))
+        .catch(() => { /* 模型列表加载失败不阻断聊天 */ })
     }
   }, [state.isLoggedIn, state.conversations.length, state.conversationsLoading])
 

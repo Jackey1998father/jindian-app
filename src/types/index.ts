@@ -41,6 +41,7 @@ export interface ChatMessage {
   hasSource: boolean
   sources: string | null
   time: string
+  images?: string[]     // 用户消息携带的图片（data URL），视觉模型用
 }
 
 /** 后端返回的会话摘要（列表用） */
@@ -61,11 +62,23 @@ export interface ConversationDetail {
   messages: ApiMessageItem[]
 }
 
+/** 后端返回的可选模型（tj_models 表） */
+export interface ModelOption {
+  model_id: string
+  name: string
+  model_type: string    // chat / embedding / rerank
+  provider: string
+  max_tokens: number
+  is_default: boolean
+  description?: string | null
+}
+
 /** 后端返回的单条消息 */
 export interface ApiMessageItem {
   id: string
   role: "user" | "assistant"
   content: string
+  reasoning?: string | null
   created_at: string
 }
 

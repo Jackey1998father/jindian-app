@@ -51,7 +51,7 @@ export function WelcomeScreen({
   /** 点击快捷标签时调用，传入完整问题文本（只填入输入框，不自动发送） */
   onChipClick: (query: string) => void
 }) {
-  const TITLE = "您好锦鲤，我是您的智拌助手"
+  const TITLE = "您好锦鲤，我是您的智拌助手--锦灵"
   const TITLE_PLAIN_LEN = "您好锦鲤，".length
   const SUBTITLE =
     "我可以回答餐饮经营相关的各种问题。\n添加知识库后，我将基于您的专属资料精准应答。"
