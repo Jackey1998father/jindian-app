@@ -55,6 +55,12 @@ export const mdComponents: Partial<Components> = {
   },
   // 分割线
   hr: () => <hr className="my-2 border-thread" />,
+  // 引用角标（回答正文里「参考资料 N」会被替换成 <sup>N</sup>，与下方来源卡片数字一一对应）
+  sup: ({ children }) => (
+    <sup className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 mx-0.5 text-[10px] font-bold leading-none text-white bg-sprout rounded align-super select-none">
+      {children}
+    </sup>
+  ),
   // 引用
   blockquote: ({ children }) => (
     <blockquote className="border-l-2 border-sprout pl-3 my-1.5 text-ink-muted italic text-[13px]">

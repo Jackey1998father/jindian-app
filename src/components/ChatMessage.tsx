@@ -3,6 +3,23 @@ import type { ChatMessage as ChatMessageType } from "@/types"
 import { MarkdownRenderer } from "@/components/MarkdownRenderer"
 import { cn } from "@/lib/utils"
 
+/**
+ * 把回答里的「参考资料 N」引用替换成角标 <sup>N</sup>。
+ * 支持【参考资料 1】/ 参考资料 1 /【参考资料 1、2、3】等形式，
+ * 供 MarkdownRenderer 的 sup 组件渲染成小角标，与来源卡片数字一一对应。
+ */
+function renderCitations(text: string): string {
+  return text.replace(
+    /【?参考资料\s*(\d+(?:[、，,\s]+\d+)*)】?/g,
+    (_m, nums: string) =>
+      nums
+        .split(/[、，,\s]+/)
+        .filter(Boolean)
+        .map((n: string) => `<sup>${n}</sup>`)
+        .join(""),
+  )
+}
+
 export function ChatMessage({ message }: { message: ChatMessageType }) {
   const isUser = message.role === "user"
   const avatarSrc = isUser ? "/avatars/user-avatar.png" : "/icon-purple.svg"
@@ -116,16 +133,35 @@ export function ChatMessage({ message }: { message: ChatMessageType }) {
                   </span>
                 </span>
               ) : (
-                <MarkdownRenderer>{message.text}</MarkdownRenderer>
+                <MarkdownRenderer>
+                  {message.sources && message.sources.length > 0
+                    ? renderCitations(message.text)
+                    : message.text}
+                </MarkdownRenderer>
               )}
             </>
           )}
 
-          {/* Source badge */}
-          {message.hasSource && message.sources && (
-            <div className="inline-flex items-center gap-1 mt-2 px-2.5 py-1 bg-wasabi-light text-wasabi text-[11px] font-medium rounded border-l-2 border-sprout">
-              <span className="text-[6px]">◆</span>
-              {message.sources}
+          {/* 参考来源卡片（角标与「参考资料 N」一一对应） */}
+          {message.sources && message.sources.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-thread-light">
+              <div className="text-[11px] font-semibold text-ink-muted mb-2">参考来源</div>
+              <div className="flex flex-wrap gap-2">
+                {message.sources.map((s) => (
+                  <div
+                    key={s.index}
+                    className="inline-flex items-center gap-1.5 px-2 py-1.5 bg-parchment rounded-lg border border-thread"
+                    title={s.title}
+                  >
+                    <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-md bg-sprout text-white text-[11px] font-bold leading-none">
+                      {s.index}
+                    </span>
+                    <span className="text-[12px] text-ink truncate max-w-[180px]">
+                      {s.title || "未命名文档"}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

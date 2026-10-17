@@ -3,7 +3,7 @@ import { useApp } from "@/components/AppContext"
 import { AlertDialog } from "@/components/AlertDialog"
 import { genId } from "@/services/storage"
 import { chatStream, ragChatStream, createConversation } from "@/services/api"
-import type { ChatMessage, ConversationSummary } from "@/types"
+import type { ChatMessage, ConversationSummary, RAGSource } from "@/types"
 
 let _setInputQuery: ((q: string) => void) | null = null
 
@@ -191,7 +191,11 @@ export function ChatInput() {
 
       let receivedFirstChunk = false
       try {
-        const handleChunk = (chunk: { content?: string; reasoning?: string }) => {
+        const handleChunk = (chunk: { content?: string; reasoning?: string; sources?: RAGSource[] }) => {
+          // 检索来源：一次性设置（后端在回答正文前推回）
+          if (chunk.sources && chunk.sources.length > 0) {
+            dispatch({ type: "SET_MESSAGE_SOURCES", id: aiMsgId, sources: chunk.sources, conversationId: convId })
+          }
           // 思考过程：持续追加
           if (chunk.reasoning) {
             dispatch({ type: "APPEND_REASONING", id: aiMsgId, text: chunk.reasoning, conversationId: convId })
@@ -263,15 +267,29 @@ export function ChatInput() {
     dispatch({ type: "TOGGLE_KB_SELECTION", kbId })
   }
 
-  // 选择图片 → 读成 data URL（大图压缩）→ 追加到待发送列表（最多 4 张）
+  // 选择图片 → 校验大小（≤2MB）→ 读成 data URL（大图压缩）→ 追加到待发送列表（最多 4 张）
   const handlePickImages = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return
     const MAX_IMAGES = 4
+    const MAX_IMAGE_SIZE = 2 * 1024 * 1024 // 2MB
     const picked = Array.from(files).filter((f) => f.type.startsWith("image/"))
     if (picked.length === 0) return
 
+    const oversized = picked.filter((f) => f.size > MAX_IMAGE_SIZE)
+    if (oversized.length > 0) {
+      dispatch({
+        type: "ADD_TOAST",
+        toast: {
+          id: Date.now().toString(),
+          message: `图片大小不能超过 2MB：${oversized.map((f) => f.name).join("、")}`,
+          type: "error",
+        },
+      })
+    }
+
+    const valid = picked.filter((f) => f.size <= MAX_IMAGE_SIZE)
     const urls: string[] = []
-    for (const f of picked) {
+    for (const f of valid) {
       try {
         const raw = await readFileAsDataURL(f)
         urls.push(await downscaleDataURL(raw))
@@ -281,7 +299,7 @@ export function ChatInput() {
     }
     if (urls.length === 0) return
     setImages((prev) => [...prev, ...urls].slice(0, MAX_IMAGES))
-  }, [])
+  }, [dispatch])
 
   const sendDisabled = state.isTyping || streamingConvIdsRef.current.has(state.activeConversationId)
 

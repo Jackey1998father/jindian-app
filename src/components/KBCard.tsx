@@ -3,6 +3,7 @@ import type { KnowledgeBase } from "@/types"
 import { useApp } from "@/components/AppContext"
 import { deleteKnowledgeBase } from "@/hooks/useApp"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
+import { AlertDialog } from "@/components/AlertDialog"
 import { cn } from "@/lib/utils"
 
 const ICONS = ["🍽️", "📋", "🧾", "🍳", "🥗", "🍰", "☕", "📊", "🔖", "📖"]
@@ -10,6 +11,7 @@ const ICONS = ["🍽️", "📋", "🧾", "🍳", "🥗", "🍰", "☕", "📊",
 export function KBCard({ kb, index }: { kb: KnowledgeBase; index: number }) {
   const { state, dispatch } = useApp()
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [alertOpen, setAlertOpen] = useState(false)
 
   const handleClick = () => {
     dispatch({ type: "SWITCH_VIEW", view: "kb-detail", kbId: kb.id })
@@ -58,7 +60,11 @@ export function KBCard({ kb, index }: { kb: KnowledgeBase; index: number }) {
           <button
             onClick={(e) => {
               e.stopPropagation()
-              setConfirmOpen(true)
+              if (kb.docCount > 0) {
+                setAlertOpen(true)
+              } else {
+                setConfirmOpen(true)
+              }
             }}
             className={cn(
               "w-7 h-7 rounded-md flex items-center justify-center text-sm text-ink-faint opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50 hover:text-red-500 active:scale-90"
@@ -73,10 +79,18 @@ export function KBCard({ kb, index }: { kb: KnowledgeBase; index: number }) {
       <ConfirmDialog
         open={confirmOpen}
         title="删除知识库"
-        message={`确定删除知识库「${kb.name}」吗？\n该知识库下所有文档也将被永久删除。`}
+        message={`确定删除知识库「${kb.name}」吗？删除后不可恢复。`}
         confirmText="删除"
         onConfirm={handleDelete}
         onCancel={() => setConfirmOpen(false)}
+      />
+
+      <AlertDialog
+        open={alertOpen}
+        title="无法删除知识库"
+        message={`知识库「${kb.name}」下还有 ${kb.docCount} 篇文档。\n请先删除该知识库下的所有文档，再删除知识库。`}
+        confirmText="知道了"
+        onConfirm={() => setAlertOpen(false)}
       />
     </div>
   )

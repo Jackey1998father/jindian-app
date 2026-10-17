@@ -6,6 +6,7 @@ import type {
   KnowledgeBaseSummary,
   Document,
   ModelOption,
+  RAGSource,
 } from "@/types"
 import {
   getChatURL,
@@ -212,7 +213,7 @@ export function toChatMessages(items: ApiMessageItem[]): ChatMessage[] {
 export async function chatStream(
   conversationId: string,
   message: string,
-  onChunk: (chunk: { content?: string; reasoning?: string }) => void,
+  onChunk: (chunk: { content?: string; reasoning?: string; sources?: RAGSource[] }) => void,
   signal?: AbortSignal,
   thinking?: boolean,
   model?: string,
@@ -281,6 +282,10 @@ export async function chatStream(
           const delta = chunk.choices?.[0]?.delta
           const content: string | undefined = delta?.content
           const reasoning: string | undefined = delta?.reasoning_content
+          const sources: RAGSource[] | undefined = delta?.sources
+          if (sources && sources.length > 0) {
+            onChunk({ sources })
+          }
           if (content || reasoning) {
             if (content) fullText += content
             onChunk({ content, reasoning })
@@ -313,7 +318,7 @@ export async function ragChatStream(
   conversationId: string,
   message: string,
   kbIds: string[],
-  onChunk: (chunk: { content?: string; reasoning?: string }) => void,
+  onChunk: (chunk: { content?: string; reasoning?: string; sources?: RAGSource[] }) => void,
   signal?: AbortSignal,
   thinking?: boolean,
   model?: string,
@@ -384,6 +389,10 @@ export async function ragChatStream(
           const delta = chunk.choices?.[0]?.delta
           const content: string | undefined = delta?.content
           const reasoning: string | undefined = delta?.reasoning_content
+          const sources: RAGSource[] | undefined = delta?.sources
+          if (sources && sources.length > 0) {
+            onChunk({ sources })
+          }
           if (content || reasoning) {
             if (content) fullText += content
             onChunk({ content, reasoning })

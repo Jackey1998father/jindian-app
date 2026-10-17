@@ -4,7 +4,7 @@ import { DocCard } from "@/components/DocCard"
 import { Modal } from "@/components/Modal"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { MarkdownRenderer } from "@/components/MarkdownRenderer"
-import { loadDocumentsForKB, uploadDocumentToKB, deleteDocumentFromKB } from "@/hooks/useApp"
+import { loadDocumentsForKB, uploadDocumentToKB, deleteDocumentFromKB, deleteDocumentsFromKB } from "@/hooks/useApp"
 import { fetchDocumentContent } from "@/services/api"
 import type { DocFileType } from "@/types"
 
@@ -12,6 +12,7 @@ const DOC_ACCEPT = ".pdf,.txt,.ppt,.pptx,.doc,.docx"
 const TABLE_ACCEPT = ".csv,.xlsx"
 const DOC_LABEL = "支持 PDF · TXT · PPT · DOC · DOCX"
 const TABLE_LABEL = "支持 CSV · XLSX"
+const MAX_FILE_SIZE = 2 * 1024 * 1024 // 单文件最大 2MB
 
 function getFileType(file: File): DocFileType {
   const ext = file.name.split(".").pop()?.toLowerCase() || ""
@@ -44,6 +45,11 @@ export function KBDetailView() {
 
   // 待删除文档（null 表示未在确认删除流程中）
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
+
+  // 多选批量删除
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
 
   const handlePreview = async (docId: string, docTitle: string) => {
     setPreviewTitle(docTitle)
@@ -87,14 +93,30 @@ export function KBDetailView() {
 
   const addFiles = (files: FileList) => {
     const list: File[] = []
+    const oversized: string[] = []
     for (let i = 0; i < files.length; i++) {
-      const ext = files[i].name.split(".").pop()?.toLowerCase()
+      const file = files[i]
+      const ext = file.name.split(".").pop()?.toLowerCase()
       const allowed = uploadTab === "doc"
         ? ["pdf", "txt", "ppt", "pptx", "doc", "docx"]
         : ["csv", "xlsx"]
       if (ext && allowed.includes(ext)) {
-        list.push(files[i])
+        if (file.size > MAX_FILE_SIZE) {
+          oversized.push(file.name)
+        } else {
+          list.push(file)
+        }
       }
+    }
+    if (oversized.length > 0) {
+      dispatch({
+        type: "ADD_TOAST",
+        toast: {
+          id: Date.now().toString(),
+          message: `文件大小不能超过 2MB：${oversized.join("、")}`,
+          type: "error",
+        },
+      })
     }
     setSelectedFiles((prev) => [...prev, ...list])
   }
@@ -165,6 +187,47 @@ export function KBDetailView() {
 
   const docs = state.currentKBDocuments
 
+  // ===== 多选批量删除 =====
+  const toggleSelect = (docId: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(docId) ? prev.filter((id) => id !== docId) : [...prev, docId],
+    )
+  }
+
+  const enterSelectMode = () => {
+    setSelectedIds([])
+    setSelectMode(true)
+  }
+
+  const exitSelectMode = () => {
+    setSelectMode(false)
+    setSelectedIds([])
+  }
+
+  const selectAll = () => {
+    setSelectedIds(docs.map((d) => d.id))
+  }
+
+  const handleBatchDelete = async () => {
+    setBatchDeleteOpen(false)
+    const ids = selectedIds
+    if (ids.length === 0) return
+    const { success, failed } = await deleteDocumentsFromKB(ids, kb.id, dispatch)
+    if (success > 0) {
+      dispatch({
+        type: "ADD_TOAST",
+        toast: { id: Date.now().toString(), message: `成功删除 ${success} 个文档`, type: "info" },
+      })
+    }
+    if (failed > 0) {
+      dispatch({
+        type: "ADD_TOAST",
+        toast: { id: Date.now().toString(), message: `${failed} 个文档删除失败`, type: "error" },
+      })
+    }
+    exitSelectMode()
+  }
+
   return (
     <main className="flex flex-col flex-1 overflow-hidden">
       {/* Detail header */}
@@ -187,22 +250,56 @@ export function KBDetailView() {
           {kb.docCount} 篇文档
         </span>
 
-        <button
-          onClick={() => {
-            setSelectedFiles([])
-            setUploadTab("doc")
-            setShowUpload(true)
-          }}
-          className="inline-flex items-center gap-1 md:gap-1.5 px-2.5 md:px-4 py-2 text-[12px] md:text-[13px] font-semibold text-white bg-persimmon rounded-lg hover:bg-persimmon-hi hover:shadow-[0_2px_8px_rgba(224,85,31,0.2)] active:scale-95 transition-all whitespace-nowrap"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" />
-            <line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
-          <span className="hidden sm:inline">上传文档</span>
-          <span className="sm:hidden">上传</span>
-        </button>
+        {selectMode ? (
+          <>
+            <button
+              onClick={selectAll}
+              className="px-2.5 md:px-4 py-2 text-[12px] md:text-[13px] font-semibold text-ink-soft bg-parchment border border-thread rounded-lg hover:bg-white active:scale-95 transition-all whitespace-nowrap"
+            >
+              全选
+            </button>
+            <button
+              onClick={() => setBatchDeleteOpen(true)}
+              disabled={selectedIds.length === 0}
+              className="px-2.5 md:px-4 py-2 text-[12px] md:text-[13px] font-semibold text-white bg-persimmon rounded-lg hover:bg-persimmon-hi active:scale-95 transition-all whitespace-nowrap disabled:bg-ink-faint disabled:cursor-not-allowed"
+            >
+              删除({selectedIds.length})
+            </button>
+            <button
+              onClick={exitSelectMode}
+              className="px-2.5 md:px-4 py-2 text-[12px] md:text-[13px] font-semibold text-ink-soft bg-parchment border border-thread rounded-lg hover:bg-white active:scale-95 transition-all whitespace-nowrap"
+            >
+              取消
+            </button>
+          </>
+        ) : (
+          <>
+            {docs.length > 0 && (
+              <button
+                onClick={enterSelectMode}
+                className="px-2.5 md:px-4 py-2 text-[12px] md:text-[13px] font-semibold text-ink-soft bg-parchment border border-thread rounded-lg hover:bg-white active:scale-95 transition-all whitespace-nowrap"
+              >
+                多选
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setSelectedFiles([])
+                setUploadTab("doc")
+                setShowUpload(true)
+              }}
+              className="inline-flex items-center gap-1 md:gap-1.5 px-2.5 md:px-4 py-2 text-[12px] md:text-[13px] font-semibold text-white bg-persimmon rounded-lg hover:bg-persimmon-hi hover:shadow-[0_2px_8px_rgba(224,85,31,0.2)] active:scale-95 transition-all whitespace-nowrap"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              <span className="hidden sm:inline">上传文档</span>
+              <span className="sm:hidden">上传</span>
+            </button>
+          </>
+        )}
       </div>
 
       {/* Document list */}
@@ -243,6 +340,9 @@ export function KBDetailView() {
             <DocCard
               key={doc.id}
               doc={doc}
+              selectMode={selectMode}
+              selected={selectedIds.includes(doc.id)}
+              onToggleSelect={() => toggleSelect(doc.id)}
               onClick={() => handlePreview(doc.id, doc.file_name || doc.title)}
               onDelete={() => setDeleteTarget({ id: doc.id, title: doc.file_name || doc.title })}
             />
@@ -419,6 +519,16 @@ export function KBDetailView() {
           if (deleteTarget) handleDeleteDoc(deleteTarget.id, deleteTarget.title)
         }}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      {/* 批量删除文档确认弹窗 */}
+      <ConfirmDialog
+        open={batchDeleteOpen}
+        title="批量删除文档"
+        message={`确定删除选中的 ${selectedIds.length} 个文档吗？删除后不可恢复。`}
+        confirmText="删除"
+        onConfirm={handleBatchDelete}
+        onCancel={() => setBatchDeleteOpen(false)}
       />
     </main>
   )

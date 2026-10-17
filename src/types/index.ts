@@ -39,9 +39,15 @@ export interface ChatMessage {
   text: string
   reasoning?: string    // DeepSeek 思考过程（增强/普通模式共用）
   hasSource: boolean
-  sources: string | null
+  sources: RAGSource[] | null   // 增强模式检索来源（角标与「参考资料 N」一一对应）
   time: string
   images?: string[]     // 用户消息携带的图片（data URL），视觉模型用
+}
+
+/** 增强模式检索到的一条来源 */
+export interface RAGSource {
+  index: number   // 序号，对应回答里的「参考资料 N」
+  title: string   // 文件名（从父块开头的「文件名：xxx」提取）
 }
 
 /** 后端返回的会话摘要（列表用） */

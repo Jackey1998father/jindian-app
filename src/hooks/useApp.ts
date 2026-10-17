@@ -12,6 +12,7 @@ import type {
   User,
   ChatMode,
   ModelOption,
+  RAGSource,
 } from "@/types"
 import {
   genId,
@@ -88,6 +89,7 @@ export type Action =
   | { type: "SET_MESSAGE_TEXT"; id: string; text: string; conversationId?: string }
   | { type: "APPEND_TO_MESSAGE"; id: string; text: string; conversationId?: string }
   | { type: "APPEND_REASONING"; id: string; text: string; conversationId?: string }
+  | { type: "SET_MESSAGE_SOURCES"; id: string; sources: RAGSource[]; conversationId?: string }
   | { type: "SET_TYPING"; value: boolean }
   // 会话
   | { type: "LOAD_CONVERSATIONS"; summaries: ConversationSummary[] }
@@ -375,6 +377,31 @@ function reducer(state: AppState, action: Action): AppState {
             : c,
         ),
       }
+    }
+
+    case "SET_MESSAGE_SOURCES": {
+      const targetConvId = action.conversationId ?? state.activeConversationId
+      if (targetConvId !== state.activeConversationId) {
+        return {
+          ...state,
+          conversations: state.conversations.map((c) => {
+            if (c.id !== targetConvId) return c
+            return {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === action.id
+                  ? { ...m, sources: action.sources, hasSource: action.sources.length > 0 }
+                  : m,
+              ),
+            }
+          }),
+        }
+      }
+      const idx = state.messages.findIndex((m) => m.id === action.id)
+      if (idx === -1) return state
+      const updated = [...state.messages]
+      updated[idx] = { ...updated[idx], sources: action.sources, hasSource: action.sources.length > 0 }
+      return { ...state, messages: updated }
     }
 
     case "SET_TYPING":
@@ -740,4 +767,24 @@ export async function deleteDocumentFromKB(
     })
     throw err
   }
+}
+
+/** 批量删除文档（逐个调用后端，返回成功/失败计数） */
+export async function deleteDocumentsFromKB(
+  docIds: string[],
+  kbId: string,
+  dispatch: Dispatch<Action>,
+): Promise<{ success: number; failed: number }> {
+  let success = 0
+  let failed = 0
+  for (const docId of docIds) {
+    try {
+      await apiDeleteDocument(docId)
+      dispatch({ type: "REMOVE_DOC_ITEM", kbId, docId })
+      success++
+    } catch {
+      failed++
+    }
+  }
+  return { success, failed }
 }
